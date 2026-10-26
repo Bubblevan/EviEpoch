@@ -1,0 +1,8 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+*.sqlite3*
+data/
+*.jsonl
+!experiments/*.example.jsonl

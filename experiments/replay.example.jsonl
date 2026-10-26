@@ -1,0 +1,2 @@
+{"op":"add","payload":{"request_id":"demo-1","user_id":"demo","session_id":"demo-session","messages":[{"role":"user","content":"I moved to Kyoto.","timestamp":1684540800000},{"role":"assistant","content":"When did you move?"}]}}
+{"op":"search","payload":{"query":"Where did I move?","user_id":"demo","top_k":5,"options":[]}}

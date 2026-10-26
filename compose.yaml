@@ -1,0 +1,16 @@
+services:
+  eviepoch:
+    build: .
+    env_file:
+      - path: ${EPOCH_ENV_FILE:-.env}
+        required: false
+    environment:
+      EPOCH_DB_PATH: /data/eviepoch.sqlite3
+    ports:
+      - "${EPOCH_BIND:-127.0.0.1}:${EPOCH_PORT:-8012}:8000"
+    volumes:
+      - eviepoch-data:/data
+    restart: unless-stopped
+
+volumes:
+  eviepoch-data:
