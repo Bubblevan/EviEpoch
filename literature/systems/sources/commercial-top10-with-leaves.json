@@ -1,0 +1,1426 @@
+{
+  "source_url": "https://huggingface.co/spaces/agent-memory-leaderboard/leaderboard/raw/main/data/generated/leaderboard_data.json",
+  "retrieved_on": "2026-10-27",
+  "source_sha256": "55ee6eb31c835021441ef87c1332aaca2e03d3f3d362bc76aae13e3615d6d066",
+  "overall": [
+    {
+      "rank": 1,
+      "system": "MemoraX",
+      "cate": "Submitted (API)",
+      "version": "v0.5",
+      "overall": 0.580185624865098,
+      "factRecall": 0.898936170212766,
+      "composition": 0.634390651085142,
+      "temporal": 0.6,
+      "governance": 0.511936339522547,
+      "personalization": 0.585127201565558,
+      "execution": 0.299852289512555,
+      "safety": 0.583892617449665,
+      "totalTime": "快速",
+      "writeTime": "快速",
+      "searchTime": "快速",
+      "returnSize": "Compact"
+    },
+    {
+      "rank": 2,
+      "system": "MemOS",
+      "cate": "Evaluated",
+      "version": "v2.0.1",
+      "overall": 0.458881933952083,
+      "factRecall": 0.689497716894977,
+      "composition": 0.534142640364188,
+      "temporal": 0.565295169946333,
+      "governance": 0.442970822281167,
+      "personalization": 0.487279843444227,
+      "execution": 0.0981949458483755,
+      "safety": 0.561290322580645,
+      "totalTime": "快速",
+      "writeTime": "快速",
+      "searchTime": "快速",
+      "returnSize": "Balanced"
+    },
+    {
+      "rank": 3,
+      "system": "NTES-MEMORY-SMART",
+      "cate": "Submitted (API)",
+      "version": "AML-Eval-SMART",
+      "overall": 0.442053677130841,
+      "factRecall": 0.555650956729724,
+      "composition": 0.468032317539146,
+      "temporal": 0.205987875173922,
+      "governance": 0.312365699434665,
+      "personalization": 0.569634703196347,
+      "execution": 0.277436823104693,
+      "safety": 0.290322580645161,
+      "totalTime": "快速",
+      "writeTime": "快速",
+      "searchTime": "快速",
+      "returnSize": "Balanced"
+    },
+    {
+      "rank": 4,
+      "system": "AML-Eval-FLASH",
+      "cate": "Submitted (API)",
+      "version": "FLASH",
+      "overall": 0.436504880291304,
+      "factRecall": 0.554278375733855,
+      "composition": 0.436559613039127,
+      "temporal": 0.222773092540534,
+      "governance": 0.309267839440253,
+      "personalization": 0.560583822570124,
+      "execution": 0.272623345367028,
+      "safety": 0.296774193548387,
+      "totalTime": "快速",
+      "writeTime": "快速",
+      "searchTime": "快速",
+      "returnSize": "Balanced"
+    },
+    {
+      "rank": 5,
+      "system": "Cognee",
+      "cate": "Evaluated",
+      "version": "v1.4.0",
+      "overall": 0.426105213586327,
+      "factRecall": 0.536199989128071,
+      "composition": 0.429030304125145,
+      "temporal": 0.220069142743561,
+      "governance": 0.321438092558782,
+      "personalization": 0.544928245270711,
+      "execution": 0.271058965102286,
+      "safety": 0.290322580645161,
+      "totalTime": "慢速",
+      "writeTime": "慢速",
+      "searchTime": "中速",
+      "returnSize": "Verbose"
+    },
+    {
+      "rank": 6,
+      "system": "NTES-MEMORY-MQ-LAYER",
+      "cate": "Submitted (API)",
+      "version": "v1.0",
+      "overall": 0.421124032094246,
+      "factRecall": 0.523462165688193,
+      "composition": 0.418183788896991,
+      "temporal": 0.215058778430872,
+      "governance": 0.321090116779772,
+      "personalization": 0.533675799086758,
+      "execution": 0.278098676293622,
+      "safety": 0.329032258064516,
+      "totalTime": "中速",
+      "writeTime": "快速",
+      "searchTime": "中速",
+      "returnSize": "Verbose"
+    },
+    {
+      "rank": 7,
+      "system": "TencentDB",
+      "cate": "Evaluated",
+      "version": "v2.0.0",
+      "overall": 0.41483396840347,
+      "factRecall": 0.504418080017395,
+      "composition": 0.391211103009282,
+      "temporal": 0.218867308402192,
+      "governance": 0.315393514531445,
+      "personalization": 0.530984996738421,
+      "execution": 0.286642599277978,
+      "safety": 0.348387096774193,
+      "totalTime": "慢速",
+      "writeTime": "慢速",
+      "searchTime": "快速",
+      "returnSize": "Balanced"
+    },
+    {
+      "rank": 8,
+      "system": "Mem0",
+      "cate": "Evaluated",
+      "version": "v3",
+      "overall": 0.414035536674755,
+      "factRecall": 0.506047238530115,
+      "composition": 0.426975477734203,
+      "temporal": 0.174291535338047,
+      "governance": 0.360444440616854,
+      "personalization": 0.55291911285062,
+      "execution": 0.273586040914561,
+      "safety": 0.374193548387097,
+      "totalTime": "中速",
+      "writeTime": "中速",
+      "searchTime": "中速",
+      "returnSize": "Compact"
+    },
+    {
+      "rank": 9,
+      "system": "MemPalace",
+      "cate": "Submitted (API)",
+      "version": "v3.5.0",
+      "overall": 0.394776602633283,
+      "factRecall": 0.587671232876712,
+      "composition": 0.515933232169955,
+      "temporal": 0.305903398926655,
+      "governance": 0.331564986737401,
+      "personalization": 0.571428571428571,
+      "execution": 0.0685920577617329,
+      "safety": 0.438709677419355,
+      "totalTime": "中速",
+      "writeTime": "中速",
+      "searchTime": "快速",
+      "returnSize": "Balanced"
+    },
+    {
+      "rank": 10,
+      "system": "Vectorize Hindsight Cloud",
+      "cate": "Evaluated",
+      "version": "v1.0.1",
+      "overall": 0.385411467205121,
+      "factRecall": 0.464335181561209,
+      "composition": 0.404349751580404,
+      "temporal": 0.168714683249567,
+      "governance": 0.348335381094002,
+      "personalization": 0.556914546640574,
+      "execution": 0.243200962695548,
+      "safety": 0.393548387096774,
+      "totalTime": "中速",
+      "writeTime": "快速",
+      "searchTime": "中速",
+      "returnSize": "Compact"
+    }
+  ],
+  "category_leaves": {
+    "1": {
+      "label": "Fact Recall",
+      "columns": [
+        "Fact Recall",
+        "Single-Fact, Attribute & Source Recall",
+        "Entity, Role, Speaker, Action & Attribution",
+        "Structured Field, Set & Enumeration Extraction"
+      ],
+      "rows": [
+        {
+          "rank": 1,
+          "system": "MemoraX",
+          "categoryScore": 0.898936170212766,
+          "leaves": {
+            "Single-Fact, Attribute & Source Recall": 0.935010482180294,
+            "Entity, Role, Speaker, Action & Attribution": 0.660194174757282,
+            "Structured Field, Set & Enumeration Extraction": 0.76056338028169
+          },
+          "cate": "Submitted (API)",
+          "version": "v0.5",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 2,
+          "system": "MemOS",
+          "categoryScore": 0.689497716894977,
+          "leaves": {
+            "Single-Fact, Attribute & Source Recall": 0.709661835748792,
+            "Entity, Role, Speaker, Action & Attribution": 0.436893203883495,
+            "Structured Field, Set & Enumeration Extraction": 0.458015267175573
+          },
+          "cate": "Evaluated",
+          "version": "v2.0.1",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 3,
+          "system": "MemPalace",
+          "categoryScore": 0.587671232876712,
+          "leaves": {
+            "Single-Fact, Attribute & Source Recall": 0.598550724637681,
+            "Entity, Role, Speaker, Action & Attribution": 0.446601941747573,
+            "Structured Field, Set & Enumeration Extraction": 0.549618320610687
+          },
+          "cate": "Submitted (API)",
+          "version": "v3.5.0",
+          "totalTime": "中速",
+          "writeTime": "中速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 4,
+          "system": "NTES-MEMORY-SMART",
+          "categoryScore": 0.555650956729724,
+          "leaves": {
+            "Single-Fact, Attribute & Source Recall": 0.564191108810674,
+            "Entity, Role, Speaker, Action & Attribution": 0.456310679611651,
+            "Structured Field, Set & Enumeration Extraction": 0.504739185750636
+          },
+          "cate": "Submitted (API)",
+          "version": "AML-Eval-SMART",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 5,
+          "system": "AML-Eval-FLASH",
+          "categoryScore": 0.554278375733855,
+          "leaves": {
+            "Single-Fact, Attribute & Source Recall": 0.565637508626639,
+            "Entity, Role, Speaker, Action & Attribution": 0.41747572815534,
+            "Structured Field, Set & Enumeration Extraction": 0.475667938931298
+          },
+          "cate": "Submitted (API)",
+          "version": "FLASH",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 6,
+          "system": "Cognee",
+          "categoryScore": 0.536199989128071,
+          "leaves": {
+            "Single-Fact, Attribute & Source Recall": 0.549409650333563,
+            "Entity, Role, Speaker, Action & Attribution": 0.368932038834952,
+            "Structured Field, Set & Enumeration Extraction": 0.403784987277354
+          },
+          "cate": "Evaluated",
+          "version": "v1.4.0",
+          "totalTime": "慢速",
+          "writeTime": "慢速",
+          "searchTime": "中速",
+          "returnSize": "Verbose"
+        },
+        {
+          "rank": 7,
+          "system": "NTES-MEMORY-MQ-LAYER",
+          "categoryScore": 0.523462165688193,
+          "leaves": {
+            "Single-Fact, Attribute & Source Recall": 0.537865769496204,
+            "Entity, Role, Speaker, Action & Attribution": 0.359223300970874,
+            "Structured Field, Set & Enumeration Extraction": 0.40089058524173
+          },
+          "cate": "Submitted (API)",
+          "version": "v1.0",
+          "totalTime": "中速",
+          "writeTime": "快速",
+          "searchTime": "中速",
+          "returnSize": "Verbose"
+        },
+        {
+          "rank": 9,
+          "system": "Mem0",
+          "categoryScore": 0.506047238530115,
+          "leaves": {
+            "Single-Fact, Attribute & Source Recall": 0.51364417989418,
+            "Entity, Role, Speaker, Action & Attribution": 0.436893203883495,
+            "Structured Field, Set & Enumeration Extraction": 0.500667938931298
+          },
+          "cate": "Evaluated",
+          "version": "v3",
+          "githubUrl": "https://github.com/mem0ai/mem0",
+          "totalTime": "中速",
+          "writeTime": "中速",
+          "searchTime": "中速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 10,
+          "system": "TencentDB",
+          "categoryScore": 0.504418080017395,
+          "leaves": {
+            "Single-Fact, Attribute & Source Recall": 0.517234587071544,
+            "Entity, Role, Speaker, Action & Attribution": 0.349514563106796,
+            "Structured Field, Set & Enumeration Extraction": 0.436545801526718
+          },
+          "cate": "Evaluated",
+          "version": "v2.0.0",
+          "totalTime": "慢速",
+          "writeTime": "慢速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 11,
+          "system": "Vectorize Hindsight Cloud",
+          "categoryScore": 0.464335181561209,
+          "leaves": {
+            "Single-Fact, Attribute & Source Recall": 0.472895675178284,
+            "Entity, Role, Speaker, Action & Attribution": 0.398058252427185,
+            "Structured Field, Set & Enumeration Extraction": 0.396310432569975
+          },
+          "cate": "Evaluated",
+          "version": "v1.0.1",
+          "totalTime": "中速",
+          "writeTime": "快速",
+          "searchTime": "中速",
+          "returnSize": "Compact"
+        }
+      ]
+    },
+    "2": {
+      "label": "Composition",
+      "columns": [
+        "Composition",
+        "Cross-Fragment / Cross-Session Multi-Evidence Aggregation",
+        "Causal Chain, Path & Intermediate-Step Recovery",
+        "Evidence-Set / Path Support & Validity Verification",
+        "Controlled Open-Domain / Common-Sense Completion"
+      ],
+      "rows": [
+        {
+          "rank": 1,
+          "system": "MemoraX",
+          "categoryScore": 0.634390651085142,
+          "leaves": {
+            "Cross-Fragment / Cross-Session Multi-Evidence Aggregation": 0.65311004784689,
+            "Causal Chain, Path & Intermediate-Step Recovery": 0.45945945945946,
+            "Evidence-Set / Path Support & Validity Verification": 0.526315789473684,
+            "Controlled Open-Domain / Common-Sense Completion": 0.768115942028986
+          },
+          "cate": "Submitted (API)",
+          "version": "v0.5",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 2,
+          "system": "MemOS",
+          "categoryScore": 0.534142640364188,
+          "leaves": {
+            "Cross-Fragment / Cross-Session Multi-Evidence Aggregation": 0.565365025466893,
+            "Causal Chain, Path & Intermediate-Step Recovery": 0.274725274725275,
+            "Evidence-Set / Path Support & Validity Verification": 0.263157894736842,
+            "Controlled Open-Domain / Common-Sense Completion": 0.782608695652174
+          },
+          "cate": "Evaluated",
+          "version": "v2.0.1",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 3,
+          "system": "MemPalace",
+          "categoryScore": 0.515933232169955,
+          "leaves": {
+            "Cross-Fragment / Cross-Session Multi-Evidence Aggregation": 0.544991511035654,
+            "Causal Chain, Path & Intermediate-Step Recovery": 0.296703296703297,
+            "Evidence-Set / Path Support & Validity Verification": 0.210526315789474,
+            "Controlled Open-Domain / Common-Sense Completion": 0.608695652173913
+          },
+          "cate": "Submitted (API)",
+          "version": "v3.5.0",
+          "totalTime": "中速",
+          "writeTime": "中速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 4,
+          "system": "NTES-MEMORY-SMART",
+          "categoryScore": 0.468032317539146,
+          "leaves": {
+            "Cross-Fragment / Cross-Session Multi-Evidence Aggregation": 0.486304409606617,
+            "Causal Chain, Path & Intermediate-Step Recovery": 0.285714285714286,
+            "Evidence-Set / Path Support & Validity Verification": 0.368421052631579,
+            "Controlled Open-Domain / Common-Sense Completion": 0.623188405797101
+          },
+          "cate": "Submitted (API)",
+          "version": "AML-Eval-SMART",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 5,
+          "system": "AML-Eval-FLASH",
+          "categoryScore": 0.436559613039127,
+          "leaves": {
+            "Cross-Fragment / Cross-Session Multi-Evidence Aggregation": 0.462975865862114,
+            "Causal Chain, Path & Intermediate-Step Recovery": 0.263736263736264,
+            "Evidence-Set / Path Support & Validity Verification": 0.210526315789474,
+            "Controlled Open-Domain / Common-Sense Completion": 0.594202898550725
+          },
+          "cate": "Submitted (API)",
+          "version": "FLASH",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 6,
+          "system": "Cognee",
+          "categoryScore": 0.429030304125145,
+          "leaves": {
+            "Cross-Fragment / Cross-Session Multi-Evidence Aggregation": 0.447760560982123,
+            "Causal Chain, Path & Intermediate-Step Recovery": 0.274725274725275,
+            "Evidence-Set / Path Support & Validity Verification": 0.289473684210526,
+            "Controlled Open-Domain / Common-Sense Completion": 0.594202898550725
+          },
+          "cate": "Evaluated",
+          "version": "v1.4.0",
+          "totalTime": "慢速",
+          "writeTime": "慢速",
+          "searchTime": "中速",
+          "returnSize": "Verbose"
+        },
+        {
+          "rank": 7,
+          "system": "Mem0",
+          "categoryScore": 0.426975477734203,
+          "leaves": {
+            "Cross-Fragment / Cross-Session Multi-Evidence Aggregation": 0.450554906327402,
+            "Causal Chain, Path & Intermediate-Step Recovery": 0.230769230769231,
+            "Evidence-Set / Path Support & Validity Verification": 0.236842105263158,
+            "Controlled Open-Domain / Common-Sense Completion": 0.536231884057971
+          },
+          "cate": "Evaluated",
+          "version": "v3",
+          "githubUrl": "https://github.com/mem0ai/mem0",
+          "totalTime": "中速",
+          "writeTime": "中速",
+          "searchTime": "中速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 8,
+          "system": "NTES-MEMORY-MQ-LAYER",
+          "categoryScore": 0.418183788896991,
+          "leaves": {
+            "Cross-Fragment / Cross-Session Multi-Evidence Aggregation": 0.444113950565564,
+            "Causal Chain, Path & Intermediate-Step Recovery": 0.230769230769231,
+            "Evidence-Set / Path Support & Validity Verification": 0.236842105263158,
+            "Controlled Open-Domain / Common-Sense Completion": 0.608695652173913
+          },
+          "cate": "Submitted (API)",
+          "version": "v1.0",
+          "totalTime": "中速",
+          "writeTime": "快速",
+          "searchTime": "中速",
+          "returnSize": "Verbose"
+        },
+        {
+          "rank": 9,
+          "system": "Vectorize Hindsight Cloud",
+          "categoryScore": 0.404349751580404,
+          "leaves": {
+            "Cross-Fragment / Cross-Session Multi-Evidence Aggregation": 0.430333593024595,
+            "Causal Chain, Path & Intermediate-Step Recovery": 0.21978021978022,
+            "Evidence-Set / Path Support & Validity Verification": 0.157894736842105,
+            "Controlled Open-Domain / Common-Sense Completion": 0.507246376811594
+          },
+          "cate": "Evaluated",
+          "version": "v1.0.1",
+          "totalTime": "中速",
+          "writeTime": "快速",
+          "searchTime": "中速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 10,
+          "system": "TencentDB",
+          "categoryScore": 0.391211103009282,
+          "leaves": {
+            "Cross-Fragment / Cross-Session Multi-Evidence Aggregation": 0.40714451083721,
+            "Causal Chain, Path & Intermediate-Step Recovery": 0.274725274725275,
+            "Evidence-Set / Path Support & Validity Verification": 0.210526315789474,
+            "Controlled Open-Domain / Common-Sense Completion": 0.550724637681159
+          },
+          "cate": "Evaluated",
+          "version": "v2.0.0",
+          "totalTime": "慢速",
+          "writeTime": "慢速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        }
+      ]
+    },
+    "3": {
+      "label": "Temporal",
+      "columns": [
+        "Temporal",
+        "Dates, Relative Time & Intervals",
+        "Event Ordering & Phase Sequencing",
+        "Event / Stance Trajectory Change"
+      ],
+      "rows": [
+        {
+          "rank": 1,
+          "system": "MemoraX",
+          "categoryScore": 0.6,
+          "leaves": {
+            "Dates, Relative Time & Intervals": 0.653301886792453,
+            "Event Ordering & Phase Sequencing": 0.233333333333333,
+            "Event / Stance Trajectory Change": 0.580645161290323
+          },
+          "cate": "Submitted (API)",
+          "version": "v0.5",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 2,
+          "system": "MemOS",
+          "categoryScore": 0.565295169946333,
+          "leaves": {
+            "Dates, Relative Time & Intervals": 0.580578512396694,
+            "Event Ordering & Phase Sequencing": 0.390977443609023,
+            "Event / Stance Trajectory Change": 0.611111111111111
+          },
+          "cate": "Evaluated",
+          "version": "v2.0.1",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 3,
+          "system": "MemPalace",
+          "categoryScore": 0.305903398926655,
+          "leaves": {
+            "Dates, Relative Time & Intervals": 0.295454545454545,
+            "Event Ordering & Phase Sequencing": 0.37593984962406,
+            "Event / Stance Trajectory Change": 0.5
+          },
+          "cate": "Submitted (API)",
+          "version": "v3.5.0",
+          "totalTime": "中速",
+          "writeTime": "中速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 5,
+          "system": "AML-Eval-FLASH",
+          "categoryScore": 0.222773092540534,
+          "leaves": {
+            "Dates, Relative Time & Intervals": 0.191178013905287,
+            "Event Ordering & Phase Sequencing": 0.240828261129013,
+            "Event / Stance Trajectory Change": 0.574074074074074
+          },
+          "cate": "Submitted (API)",
+          "version": "FLASH",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 6,
+          "system": "Cognee",
+          "categoryScore": 0.220069142743561,
+          "leaves": {
+            "Dates, Relative Time & Intervals": 0.202517873540601,
+            "Event Ordering & Phase Sequencing": 0.236982336794367,
+            "Event / Stance Trajectory Change": 0.444444444444444
+          },
+          "cate": "Evaluated",
+          "version": "v1.4.0",
+          "totalTime": "慢速",
+          "writeTime": "慢速",
+          "searchTime": "中速",
+          "returnSize": "Verbose"
+        },
+        {
+          "rank": 7,
+          "system": "TencentDB",
+          "categoryScore": 0.218867308402192,
+          "leaves": {
+            "Dates, Relative Time & Intervals": 0.203195920241375,
+            "Event Ordering & Phase Sequencing": 0.288321995464853,
+            "Event / Stance Trajectory Change": 0.425925925925926
+          },
+          "cate": "Evaluated",
+          "version": "v2.0.0",
+          "totalTime": "慢速",
+          "writeTime": "慢速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 8,
+          "system": "NTES-MEMORY-MQ-LAYER",
+          "categoryScore": 0.215058778430872,
+          "leaves": {
+            "Dates, Relative Time & Intervals": 0.196731109799292,
+            "Event Ordering & Phase Sequencing": 0.195247046186896,
+            "Event / Stance Trajectory Change": 0.407407407407407
+          },
+          "cate": "Submitted (API)",
+          "version": "v1.0",
+          "totalTime": "中速",
+          "writeTime": "快速",
+          "searchTime": "中速",
+          "returnSize": "Verbose"
+        },
+        {
+          "rank": 9,
+          "system": "NTES-MEMORY-SMART",
+          "categoryScore": 0.205987875173922,
+          "leaves": {
+            "Dates, Relative Time & Intervals": 0.169725665748393,
+            "Event Ordering & Phase Sequencing": 0.239828738512949,
+            "Event / Stance Trajectory Change": 0.574074074074074
+          },
+          "cate": "Submitted (API)",
+          "version": "AML-Eval-SMART",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 11,
+          "system": "Mem0",
+          "categoryScore": 0.174291535338047,
+          "leaves": {
+            "Dates, Relative Time & Intervals": 0.141382165813984,
+            "Event Ordering & Phase Sequencing": 0.232548633488483,
+            "Event / Stance Trajectory Change": 0.518518518518518
+          },
+          "cate": "Evaluated",
+          "version": "v3",
+          "githubUrl": "https://github.com/mem0ai/mem0",
+          "totalTime": "中速",
+          "writeTime": "中速",
+          "searchTime": "中速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 12,
+          "system": "Vectorize Hindsight Cloud",
+          "categoryScore": 0.168714683249567,
+          "leaves": {
+            "Dates, Relative Time & Intervals": 0.14527171061262,
+            "Event Ordering & Phase Sequencing": 0.291815849146676,
+            "Event / Stance Trajectory Change": 0.425925925925926
+          },
+          "cate": "Evaluated",
+          "version": "v1.0.1",
+          "totalTime": "中速",
+          "writeTime": "快速",
+          "searchTime": "中速",
+          "returnSize": "Compact"
+        }
+      ]
+    },
+    "4": {
+      "label": "Governance",
+      "columns": [
+        "Governance",
+        "New-Value Overwrite & Current-State Resolution",
+        "Contradiction Detection & Conflict Resolution",
+        "Deletion, Forgetting & Suppression",
+        "Summarization & Compression / Long-History Global Synthesis"
+      ],
+      "rows": [
+        {
+          "rank": 1,
+          "system": "MemoraX",
+          "categoryScore": 0.511936339522547,
+          "leaves": {
+            "New-Value Overwrite & Current-State Resolution": 0.699300699300699,
+            "Contradiction Detection & Conflict Resolution": 0.483333333333333,
+            "Deletion, Forgetting & Suppression": 0.280701754385965,
+            "Summarization & Compression / Long-History Global Synthesis": 0.533333333333333
+          },
+          "cate": "Submitted (API)",
+          "version": "v0.5",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 2,
+          "system": "MemOS",
+          "categoryScore": 0.442970822281167,
+          "leaves": {
+            "New-Value Overwrite & Current-State Resolution": 0.389162561576355,
+            "Contradiction Detection & Conflict Resolution": 0,
+            "Deletion, Forgetting & Suppression": 0.596491228070175,
+            "Summarization & Compression / Long-History Global Synthesis": 0.333333333333333
+          },
+          "cate": "Evaluated",
+          "version": "v2.0.1",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 3,
+          "system": "Mem0",
+          "categoryScore": 0.360444440616854,
+          "leaves": {
+            "New-Value Overwrite & Current-State Resolution": 0.484605911330049,
+            "Contradiction Detection & Conflict Resolution": 0.160416666666667,
+            "Deletion, Forgetting & Suppression": 0.087719298245614,
+            "Summarization & Compression / Long-History Global Synthesis": 0.458542568542568
+          },
+          "cate": "Evaluated",
+          "version": "v3",
+          "githubUrl": "https://github.com/mem0ai/mem0",
+          "totalTime": "中速",
+          "writeTime": "中速",
+          "searchTime": "中速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 4,
+          "system": "Vectorize Hindsight Cloud",
+          "categoryScore": 0.348335381094002,
+          "leaves": {
+            "New-Value Overwrite & Current-State Resolution": 0.426108374384236,
+            "Contradiction Detection & Conflict Resolution": 0.120833333333333,
+            "Deletion, Forgetting & Suppression": 0.192982456140351,
+            "Summarization & Compression / Long-History Global Synthesis": 0.380373977873978
+          },
+          "cate": "Evaluated",
+          "version": "v1.0.1",
+          "totalTime": "中速",
+          "writeTime": "快速",
+          "searchTime": "中速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 6,
+          "system": "MemPalace",
+          "categoryScore": 0.331564986737401,
+          "leaves": {
+            "New-Value Overwrite & Current-State Resolution": 0.438423645320197,
+            "Contradiction Detection & Conflict Resolution": 0,
+            "Deletion, Forgetting & Suppression": 0.0701754385964912,
+            "Summarization & Compression / Long-History Global Synthesis": 0.466666666666667
+          },
+          "cate": "Submitted (API)",
+          "version": "v3.5.0",
+          "totalTime": "中速",
+          "writeTime": "中速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 7,
+          "system": "Cognee",
+          "categoryScore": 0.321438092558782,
+          "leaves": {
+            "New-Value Overwrite & Current-State Resolution": 0.416871921182266,
+            "Contradiction Detection & Conflict Resolution": 0.172916666666667,
+            "Deletion, Forgetting & Suppression": 0.0789473684210526,
+            "Summarization & Compression / Long-History Global Synthesis": 0.459286014911015
+          },
+          "cate": "Evaluated",
+          "version": "v1.4.0",
+          "totalTime": "慢速",
+          "writeTime": "慢速",
+          "searchTime": "中速",
+          "returnSize": "Verbose"
+        },
+        {
+          "rank": 8,
+          "system": "NTES-MEMORY-MQ-LAYER",
+          "categoryScore": 0.321090116779772,
+          "leaves": {
+            "New-Value Overwrite & Current-State Resolution": 0.423029556650246,
+            "Contradiction Detection & Conflict Resolution": 0.20625,
+            "Deletion, Forgetting & Suppression": 0.0964912280701754,
+            "Summarization & Compression / Long-History Global Synthesis": 0.4029329004329
+          },
+          "cate": "Submitted (API)",
+          "version": "v1.0",
+          "totalTime": "中速",
+          "writeTime": "快速",
+          "searchTime": "中速",
+          "returnSize": "Verbose"
+        },
+        {
+          "rank": 9,
+          "system": "TencentDB",
+          "categoryScore": 0.315393514531445,
+          "leaves": {
+            "New-Value Overwrite & Current-State Resolution": 0.434729064039409,
+            "Contradiction Detection & Conflict Resolution": 0.254166666666667,
+            "Deletion, Forgetting & Suppression": 0.0526315789473684,
+            "Summarization & Compression / Long-History Global Synthesis": 0.41088924963925
+          },
+          "cate": "Evaluated",
+          "version": "v2.0.0",
+          "totalTime": "慢速",
+          "writeTime": "慢速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 10,
+          "system": "NTES-MEMORY-SMART",
+          "categoryScore": 0.312365699434665,
+          "leaves": {
+            "New-Value Overwrite & Current-State Resolution": 0.41871921182266,
+            "Contradiction Detection & Conflict Resolution": 0.1875,
+            "Deletion, Forgetting & Suppression": 0.0701754385964912,
+            "Summarization & Compression / Long-History Global Synthesis": 0.412697811447811
+          },
+          "cate": "Submitted (API)",
+          "version": "AML-Eval-SMART",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 11,
+          "system": "AML-Eval-FLASH",
+          "categoryScore": 0.309267839440253,
+          "leaves": {
+            "New-Value Overwrite & Current-State Resolution": 0.422413793103448,
+            "Contradiction Detection & Conflict Resolution": 0.2,
+            "Deletion, Forgetting & Suppression": 0.0614035087719298,
+            "Summarization & Compression / Long-History Global Synthesis": 0.397399591149591
+          },
+          "cate": "Submitted (API)",
+          "version": "FLASH",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        }
+      ]
+    },
+    "5": {
+      "label": "Personalization",
+      "columns": [
+        "Personalization",
+        "Preference Recall & Personalized Following",
+        "Stereotype / Anti-Stereotype Preference Robustness",
+        "Personal Background, Health & Psychological Care"
+      ],
+      "rows": [
+        {
+          "rank": 1,
+          "system": "MemoraX",
+          "categoryScore": 0.585127201565558,
+          "leaves": {
+            "Preference Recall & Personalized Following": 0.651282051282051,
+            "Stereotype / Anti-Stereotype Preference Robustness": 0.52247191011236,
+            "Personal Background, Health & Psychological Care": 0.572463768115942
+          },
+          "cate": "Submitted (API)",
+          "version": "v0.5",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 2,
+          "system": "MemPalace",
+          "categoryScore": 0.571428571428571,
+          "leaves": {
+            "Preference Recall & Personalized Following": 0.568364611260054,
+            "Stereotype / Anti-Stereotype Preference Robustness": 0.573033707865169,
+            "Personal Background, Health & Psychological Care": 0.579710144927536
+          },
+          "cate": "Submitted (API)",
+          "version": "v3.5.0",
+          "totalTime": "中速",
+          "writeTime": "中速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 3,
+          "system": "NTES-MEMORY-SMART",
+          "categoryScore": 0.569634703196347,
+          "leaves": {
+            "Preference Recall & Personalized Following": 0.560545129579982,
+            "Stereotype / Anti-Stereotype Preference Robustness": 0.589887640449438,
+            "Personal Background, Health & Psychological Care": 0.594202898550725
+          },
+          "cate": "Submitted (API)",
+          "version": "AML-Eval-SMART",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 4,
+          "system": "AML-Eval-FLASH",
+          "categoryScore": 0.560583822570124,
+          "leaves": {
+            "Preference Recall & Personalized Following": 0.540102770330652,
+            "Stereotype / Anti-Stereotype Preference Robustness": 0.589887640449438,
+            "Personal Background, Health & Psychological Care": 0.615942028985507
+          },
+          "cate": "Submitted (API)",
+          "version": "FLASH",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 5,
+          "system": "Vectorize Hindsight Cloud",
+          "categoryScore": 0.556914546640574,
+          "leaves": {
+            "Preference Recall & Personalized Following": 0.556523681858802,
+            "Stereotype / Anti-Stereotype Preference Robustness": 0.606741573033708,
+            "Personal Background, Health & Psychological Care": 0.557971014492754
+          },
+          "cate": "Evaluated",
+          "version": "v1.0.1",
+          "totalTime": "中速",
+          "writeTime": "快速",
+          "searchTime": "中速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 6,
+          "system": "Mem0",
+          "categoryScore": 0.55291911285062,
+          "leaves": {
+            "Preference Recall & Personalized Following": 0.529602323503128,
+            "Stereotype / Anti-Stereotype Preference Robustness": 0.544943820224719,
+            "Personal Background, Health & Psychological Care": 0.615942028985507
+          },
+          "cate": "Evaluated",
+          "version": "v3",
+          "githubUrl": "https://github.com/mem0ai/mem0",
+          "totalTime": "中速",
+          "writeTime": "中速",
+          "searchTime": "中速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 7,
+          "system": "Cognee",
+          "categoryScore": 0.544928245270711,
+          "leaves": {
+            "Preference Recall & Personalized Following": 0.513293118856121,
+            "Stereotype / Anti-Stereotype Preference Robustness": 0.544943820224719,
+            "Personal Background, Health & Psychological Care": 0.630434782608696
+          },
+          "cate": "Evaluated",
+          "version": "v1.4.0",
+          "totalTime": "慢速",
+          "writeTime": "慢速",
+          "searchTime": "中速",
+          "returnSize": "Verbose"
+        },
+        {
+          "rank": 8,
+          "system": "NTES-MEMORY-MQ-LAYER",
+          "categoryScore": 0.533675799086758,
+          "leaves": {
+            "Preference Recall & Personalized Following": 0.511282394995532,
+            "Stereotype / Anti-Stereotype Preference Robustness": 0.567415730337079,
+            "Personal Background, Health & Psychological Care": 0.594202898550725
+          },
+          "cate": "Submitted (API)",
+          "version": "v1.0",
+          "totalTime": "中速",
+          "writeTime": "快速",
+          "searchTime": "中速",
+          "returnSize": "Verbose"
+        },
+        {
+          "rank": 9,
+          "system": "TencentDB",
+          "categoryScore": 0.530984996738421,
+          "leaves": {
+            "Preference Recall & Personalized Following": 0.51295799821269,
+            "Stereotype / Anti-Stereotype Preference Robustness": 0.48876404494382,
+            "Personal Background, Health & Psychological Care": 0.579710144927536
+          },
+          "cate": "Evaluated",
+          "version": "v2.0.0",
+          "totalTime": "慢速",
+          "writeTime": "慢速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 14,
+          "system": "MemOS",
+          "categoryScore": 0.487279843444227,
+          "leaves": {
+            "Preference Recall & Personalized Following": 0.514745308310992,
+            "Stereotype / Anti-Stereotype Preference Robustness": 0.449438202247191,
+            "Personal Background, Health & Psychological Care": 0.41304347826087
+          },
+          "cate": "Evaluated",
+          "version": "v2.0.1",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        }
+      ]
+    },
+    "6": {
+      "label": "Execution",
+      "columns": [
+        "Execution",
+        "Domain Knowledge Reasoning",
+        "Rule-System Application",
+        "Program / Workflow Execution",
+        "Empirical Data Discovery & Simulation",
+        "Instruction / Format Constraint Following"
+      ],
+      "rows": [
+        {
+          "rank": 1,
+          "system": "MemoraX",
+          "categoryScore": 0.299852289512555,
+          "leaves": {
+            "Domain Knowledge Reasoning": 0.393333333333333,
+            "Rule-System Application": 0.205804749340369,
+            "Program / Workflow Execution": 0.32054794520548,
+            "Empirical Data Discovery & Simulation": 0.09,
+            "Instruction / Format Constraint Following": 0.416666666666667
+          },
+          "cate": "Submitted (API)",
+          "version": "v0.5",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 2,
+          "system": "TencentDB",
+          "categoryScore": 0.286642599277978,
+          "leaves": {
+            "Domain Knowledge Reasoning": 0.337777777777778,
+            "Rule-System Application": 0.216358839050132,
+            "Program / Workflow Execution": 0.336986301369863,
+            "Empirical Data Discovery & Simulation": 0.06,
+            "Instruction / Format Constraint Following": 0.330232558139535
+          },
+          "cate": "Evaluated",
+          "version": "v2.0.0",
+          "totalTime": "慢速",
+          "writeTime": "慢速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 3,
+          "system": "NTES-MEMORY-MQ-LAYER",
+          "categoryScore": 0.278098676293622,
+          "leaves": {
+            "Domain Knowledge Reasoning": 0.311111111111111,
+            "Rule-System Application": 0.216358839050132,
+            "Program / Workflow Execution": 0.350684931506849,
+            "Empirical Data Discovery & Simulation": 0.06,
+            "Instruction / Format Constraint Following": 0.321705426356589
+          },
+          "cate": "Submitted (API)",
+          "version": "v1.0",
+          "totalTime": "中速",
+          "writeTime": "快速",
+          "searchTime": "中速",
+          "returnSize": "Verbose"
+        },
+        {
+          "rank": 4,
+          "system": "NTES-MEMORY-SMART",
+          "categoryScore": 0.277436823104693,
+          "leaves": {
+            "Domain Knowledge Reasoning": 0.317777777777778,
+            "Rule-System Application": 0.213720316622691,
+            "Program / Workflow Execution": 0.326027397260274,
+            "Empirical Data Discovery & Simulation": 0.05,
+            "Instruction / Format Constraint Following": 0.345348837209302
+          },
+          "cate": "Submitted (API)",
+          "version": "AML-Eval-SMART",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 5,
+          "system": "Mem0",
+          "categoryScore": 0.273586040914561,
+          "leaves": {
+            "Domain Knowledge Reasoning": 0.3,
+            "Rule-System Application": 0.205804749340369,
+            "Program / Workflow Execution": 0.331506849315069,
+            "Empirical Data Discovery & Simulation": 0.08,
+            "Instruction / Format Constraint Following": 0.371705426356589
+          },
+          "cate": "Evaluated",
+          "version": "v3",
+          "githubUrl": "https://github.com/mem0ai/mem0",
+          "totalTime": "中速",
+          "writeTime": "中速",
+          "searchTime": "中速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 6,
+          "system": "AML-Eval-FLASH",
+          "categoryScore": 0.272623345367028,
+          "leaves": {
+            "Domain Knowledge Reasoning": 0.308888888888889,
+            "Rule-System Application": 0.20844327176781,
+            "Program / Workflow Execution": 0.32054794520548,
+            "Empirical Data Discovery & Simulation": 0.06,
+            "Instruction / Format Constraint Following": 0.346899224806202
+          },
+          "cate": "Submitted (API)",
+          "version": "FLASH",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 7,
+          "system": "Cognee",
+          "categoryScore": 0.271058965102286,
+          "leaves": {
+            "Domain Knowledge Reasoning": 0.32,
+            "Rule-System Application": 0.197889182058048,
+            "Program / Workflow Execution": 0.323287671232877,
+            "Empirical Data Discovery & Simulation": 0.07,
+            "Instruction / Format Constraint Following": 0.322868217054263
+          },
+          "cate": "Evaluated",
+          "version": "v1.4.0",
+          "totalTime": "慢速",
+          "writeTime": "慢速",
+          "searchTime": "中速",
+          "returnSize": "Verbose"
+        },
+        {
+          "rank": 12,
+          "system": "Vectorize Hindsight Cloud",
+          "categoryScore": 0.243200962695548,
+          "leaves": {
+            "Domain Knowledge Reasoning": 0.284444444444444,
+            "Rule-System Application": 0.195250659630607,
+            "Program / Workflow Execution": 0.271232876712329,
+            "Empirical Data Discovery & Simulation": 0.04,
+            "Instruction / Format Constraint Following": 0.306201550387597
+          },
+          "cate": "Evaluated",
+          "version": "v1.0.1",
+          "totalTime": "中速",
+          "writeTime": "快速",
+          "searchTime": "中速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 13,
+          "system": "MemOS",
+          "categoryScore": 0.0981949458483755,
+          "leaves": {
+            "Domain Knowledge Reasoning": 0.131111111111111,
+            "Rule-System Application": 0.0870712401055409,
+            "Program / Workflow Execution": 0.0136986301369863,
+            "Empirical Data Discovery & Simulation": 0,
+            "Instruction / Format Constraint Following": 0.218604651162791
+          },
+          "cate": "Evaluated",
+          "version": "v2.0.1",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 15,
+          "system": "MemPalace",
+          "categoryScore": 0.0685920577617329,
+          "leaves": {
+            "Domain Knowledge Reasoning": 0.1,
+            "Rule-System Application": 0.0131926121372032,
+            "Program / Workflow Execution": 0.00821917808219178,
+            "Empirical Data Discovery & Simulation": 0.02,
+            "Instruction / Format Constraint Following": 0.2
+          },
+          "cate": "Submitted (API)",
+          "version": "v3.5.0",
+          "totalTime": "中速",
+          "writeTime": "中速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        }
+      ]
+    },
+    "7": {
+      "label": "Safety",
+      "columns": [
+        "Safety",
+        "Abstention, Unknowns & Insufficient Evidence",
+        "Sensitive-Information Minimization & Privacy"
+      ],
+      "rows": [
+        {
+          "rank": 1,
+          "system": "MemoraX",
+          "categoryScore": 0.583892617449665,
+          "leaves": {
+            "Abstention, Unknowns & Insufficient Evidence": 0.662337662337662,
+            "Sensitive-Information Minimization & Privacy": 0.5
+          },
+          "cate": "Submitted (API)",
+          "version": "v0.5",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 3,
+          "system": "MemOS",
+          "categoryScore": 0.561290322580645,
+          "leaves": {
+            "Abstention, Unknowns & Insufficient Evidence": 0.698795180722892,
+            "Sensitive-Information Minimization & Privacy": 0.402777777777778
+          },
+          "cate": "Evaluated",
+          "version": "v2.0.1",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 5,
+          "system": "MemPalace",
+          "categoryScore": 0.438709677419355,
+          "leaves": {
+            "Abstention, Unknowns & Insufficient Evidence": 0.566265060240964,
+            "Sensitive-Information Minimization & Privacy": 0.291666666666667
+          },
+          "cate": "Submitted (API)",
+          "version": "v3.5.0",
+          "totalTime": "中速",
+          "writeTime": "中速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 7,
+          "system": "Vectorize Hindsight Cloud",
+          "categoryScore": 0.393548387096774,
+          "leaves": {
+            "Abstention, Unknowns & Insufficient Evidence": 0.44578313253012,
+            "Sensitive-Information Minimization & Privacy": 0.333333333333333
+          },
+          "cate": "Evaluated",
+          "version": "v1.0.1",
+          "totalTime": "中速",
+          "writeTime": "快速",
+          "searchTime": "中速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 8,
+          "system": "Mem0",
+          "categoryScore": 0.374193548387097,
+          "leaves": {
+            "Abstention, Unknowns & Insufficient Evidence": 0.421686746987952,
+            "Sensitive-Information Minimization & Privacy": 0.319444444444444
+          },
+          "cate": "Evaluated",
+          "version": "v3",
+          "githubUrl": "https://github.com/mem0ai/mem0",
+          "totalTime": "中速",
+          "writeTime": "中速",
+          "searchTime": "中速",
+          "returnSize": "Compact"
+        },
+        {
+          "rank": 9,
+          "system": "TencentDB",
+          "categoryScore": 0.348387096774193,
+          "leaves": {
+            "Abstention, Unknowns & Insufficient Evidence": 0.36144578313253,
+            "Sensitive-Information Minimization & Privacy": 0.333333333333333
+          },
+          "cate": "Evaluated",
+          "version": "v2.0.0",
+          "totalTime": "慢速",
+          "writeTime": "慢速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 11,
+          "system": "NTES-MEMORY-MQ-LAYER",
+          "categoryScore": 0.329032258064516,
+          "leaves": {
+            "Abstention, Unknowns & Insufficient Evidence": 0.337349397590361,
+            "Sensitive-Information Minimization & Privacy": 0.319444444444444
+          },
+          "cate": "Submitted (API)",
+          "version": "v1.0",
+          "totalTime": "中速",
+          "writeTime": "快速",
+          "searchTime": "中速",
+          "returnSize": "Verbose"
+        },
+        {
+          "rank": 13,
+          "system": "AML-Eval-FLASH",
+          "categoryScore": 0.296774193548387,
+          "leaves": {
+            "Abstention, Unknowns & Insufficient Evidence": 0.265060240963855,
+            "Sensitive-Information Minimization & Privacy": 0.333333333333333
+          },
+          "cate": "Submitted (API)",
+          "version": "FLASH",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        },
+        {
+          "rank": 14,
+          "system": "Cognee",
+          "categoryScore": 0.290322580645161,
+          "leaves": {
+            "Abstention, Unknowns & Insufficient Evidence": 0.253012048192771,
+            "Sensitive-Information Minimization & Privacy": 0.333333333333333
+          },
+          "cate": "Evaluated",
+          "version": "v1.4.0",
+          "totalTime": "慢速",
+          "writeTime": "慢速",
+          "searchTime": "中速",
+          "returnSize": "Verbose"
+        },
+        {
+          "rank": 15,
+          "system": "NTES-MEMORY-SMART",
+          "categoryScore": 0.290322580645161,
+          "leaves": {
+            "Abstention, Unknowns & Insufficient Evidence": 0.265060240963855,
+            "Sensitive-Information Minimization & Privacy": 0.319444444444444
+          },
+          "cate": "Submitted (API)",
+          "version": "AML-Eval-SMART",
+          "totalTime": "快速",
+          "writeTime": "快速",
+          "searchTime": "快速",
+          "returnSize": "Balanced"
+        }
+      ]
+    }
+  }
+}

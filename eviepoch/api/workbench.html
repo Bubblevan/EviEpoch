@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EviEpoch · 公开研究工作台</title>
+<style>
+:root{color-scheme:dark;font:15px/1.6 system-ui;background:#0c1521;color:#dae4ef}body{max-width:1160px;margin:40px auto;padding:0 24px}
+h1{font-size:38px;letter-spacing:-1px}small{color:#91a8bf}label{display:inline-flex;flex-direction:column;gap:5px;margin:0 12px 16px 0}
+input,textarea,button{font:inherit;color:inherit;background:#152335;border:1px solid #36516e;border-radius:7px;padding:10px}
+textarea{width:95%;min-height:80px}button{cursor:pointer;background:#1a5f6a}button:hover{background:#247d88}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}.card{background:#122031;border:1px solid #293e55;border-radius:10px;padding:16px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}h2{margin-top:32px}#status{color:#7cddd1}summary{cursor:pointer}p{max-width:850px}
+</style>
+<h1>EviEpoch <small>公开研究工作台</small></h1>
+<p>查看来源、引用片段、记忆状态和证据路径。此页面仅用于公开或自建样本；正式私有评测应关闭 EPOCH_WORKBENCH。</p>
+<label>用户范围<input id="user" value="public-demo"></label>
+<label>API token<input id="token" type="password" autocomplete="off"></label>
+<button id="load">加载记忆</button>
+<label>返回上限<input id="topk" type="number" min="0" value="10"></label>
+<textarea id="query" placeholder="输入需要核验的问题"></textarea><p><button id="search">观察取证过程</button> <span id="status" role="status"></span></p>
+<div id="metrics"></div><h2>检索证据与需求图</h2><div id="trace" class="cards"></div>
+<h2>来源与记忆</h2><div id="memory" class="cards"></div>
+<script>
+const $=id=>document.getElementById(id);
+function headers(){const token=$('token').value;return {'Content-Type':'application/json',...(token?{'Authorization':'Bearer '+token}:{})}}
+function card(target,title,value){const el=document.createElement('div');el.className='card';const h=document.createElement('strong');h.textContent=title;const p=document.createElement('pre');p.textContent=typeof value==='string'?value:JSON.stringify(value,null,2);el.append(h,p);$(target).append(el)}
+async function request(url,options){$('status').textContent='处理中…';const r=await fetch(url,{...options,headers:headers()});const value=await r.json();if(!r.ok)throw Error(JSON.stringify(value));$('status').textContent='已完成';return value}
+$('load').onclick=async()=>{try{const m=await request('/research/memory?user_id='+encodeURIComponent($('user').value));$('memory').replaceChildren();$('metrics').textContent=`Generation ${m.generation} · Policy ${m.policy_generation} · ${m.sources.length} 条来源 · ${m.nodes.length} 个记忆对象`;
+for(const s of m.sources)card('memory','L0 · '+s.role+' · '+s.id,s);for(const n of m.nodes)card('memory',n.kind+' · '+n.state,n);
+card('memory','精确引用',m.spans);card('memory','关系路径',m.edges);card('memory','管理操作',m.operations);card('memory','记忆版本',m.versions)}catch(e){$('status').textContent=e.message}};
+$('search').onclick=async()=>{try{const r=await request('/research/search',{method:'POST',body:JSON.stringify({query:$('query').value,user_id:$('user').value,top_k:Number($('topk').value)})});$('trace').replaceChildren();card('trace','最终原文证据',r.response.data);card('trace','需求与取证轨迹',r.trace)}catch(e){$('status').textContent=e.message}};
+</script></html>

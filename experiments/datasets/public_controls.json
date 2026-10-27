@@ -1,0 +1,53 @@
+{
+  "name": "eviepoch-public-controls-v1",
+  "license": "CC0-1.0",
+  "origin": "Self-authored development controls; no official/private benchmark content",
+  "purpose": "Contract and integration diagnostics, not a sealed estimate of benchmark quality",
+  "cases": [
+    {"id":"address","split":"dev","capabilities":["A","C","D"],
+     "adds":[
+       {"id":"old","messages":[{"role":"user","content":"In January 2022 I lived in Kyoto.","timestamp":1642204800000}]},
+       {"id":"new","messages":[{"role":"user","content":"In June 2024 I moved to Osaka. My current home is Osaka.","timestamp":1718409600000}]},
+       {"id":"plan","messages":[{"role":"user","content":"I plan to move to Tokyo in 2028. This is only a future plan.","timestamp":1718496000000}]}],
+     "searches":[
+       {"id":"current","query":"Where do I currently live?","top_k":3,"evidence_alternatives":[["new:0"]],"forbidden_sources":["plan:0"],"reference":"Osaka"},
+       {"id":"historical","query":"Where did I live in January 2022?","top_k":3,"evidence_alternatives":[["old:0"]],"forbidden_sources":["plan:0"],"reference":"Kyoto"}]},
+    {"id":"ordering","split":"dev","capabilities":["B","C"],
+     "adds":[
+       {"id":"job","messages":[{"role":"user","content":"I started at Arbor Labs on 12 March 2023.","timestamp":1678665600000}]},
+       {"id":"move","messages":[{"role":"user","content":"I moved to Bristol on 9 September 2023.","timestamp":1694217600000}]}],
+     "searches":[{"id":"order","query":"Did I start at Arbor Labs before or after I moved to Bristol?","top_k":4,"evidence_alternatives":[["job:0","move:0"]],"reference":"Before. The job began on 12 March 2023; the move was on 9 September 2023."}]},
+    {"id":"cause","split":"dev","capabilities":["B","G"],
+     "adds":[
+       {"id":"decision","messages":[{"role":"user","content":"The certificate rotation disabled our legacy trust anchor."}]},
+       {"id":"failure","messages":[{"role":"user","content":"Invoice delivery failed because the legacy trust anchor was disabled by the certificate rotation."}]}],
+     "searches":[{"id":"why","query":"Why did invoice delivery fail, and which earlier decision caused it?","top_k":4,"evidence_alternatives":[["decision:0","failure:0"]],"reference":"Certificate rotation disabled the legacy trust anchor, causing invoice delivery failure."}]},
+    {"id":"procedure","split":"dev","capabilities":["B","G"],
+     "adds":[
+       {"id":"rule","messages":[{"role":"user","content":"Release policy: deployment requires an approval from the on-call lead."}]},
+       {"id":"exception","messages":[{"role":"user","content":"Exception to the deployment approval policy: an active emergency incident allows deployment without prior approval, followed by an audit."}]},
+       {"id":"state","messages":[{"role":"user","content":"The current deployment is responding to an active emergency incident. No prior approval has been received."}]}],
+     "searches":[{"id":"apply","query":"Under the release policy, may the current deployment proceed without prior approval, and what is required afterward?","top_k":6,"evidence_alternatives":[["rule:0","exception:0","state:0"]],"reference":"Yes, because this is an active emergency incident. An audit must follow."}]},
+    {"id":"care","split":"dev","capabilities":["A","E"],
+     "adds":[
+       {"id":"allergy","messages":[{"role":"user","content":"我对花生严重过敏，任何场景都不能吃花生。"}]},
+       {"id":"work","messages":[{"role":"user","content":"工作日午餐我偏好素食；周末没有这个偏好限制。"}]}],
+     "searches":[{"id":"meal","query":"安排工作日午餐时，需要遵守我的哪些饮食要求？","top_k":4,"evidence_alternatives":[["allergy:0","work:0"]],"reference":"不能含花生，因为严重过敏；工作日午餐偏好素食。"}]},
+    {"id":"forget","split":"dev","capabilities":["D","H"],
+     "adds":[
+       {"id":"secret","messages":[{"role":"user","content":"My old street address was 17 Cedar Lane."}]},
+       {"id":"hobby","messages":[{"role":"user","content":"My favourite hobby is pottery."}]},
+       {"id":"delete","messages":[{"role":"user","content":"Please permanently erase my old street address, including 17 Cedar Lane, and all derived memories of that address."}]}],
+     "searches":[
+       {"id":"private","query":"What was my old street address?","top_k":4,"evidence_alternatives":[],"forbidden_text":["Cedar","17"],"must_abstain":true,"reference":"INSUFFICIENT_EVIDENCE"},
+       {"id":"unrelated","query":"What is my favourite hobby?","top_k":3,"evidence_alternatives":[["hobby:0"]],"reference":"Pottery"}]},
+    {"id":"unsupported","split":"dev","capabilities":["H"],
+     "adds":[{"id":"book","messages":[{"role":"user","content":"I finished reading The Left Hand of Darkness."}]}],
+     "searches":[{"id":"options","query":"Which of these is my bank account number?","options":["A. 123456","B. 654321"],"top_k":3,"evidence_alternatives":[],"must_abstain":true,"reference":"INSUFFICIENT_EVIDENCE"}]},
+    {"id":"reflection","split":"dev","capabilities":["D","H"],
+     "adds":[
+       {"id":"lesson","messages":[{"role":"user","content":"My current lesson is that strategy A always fails in staging."}]},
+       {"id":"counterexample","messages":[{"role":"user","content":"Strategy A succeeded in staging today. This counterexample means my earlier claim that it always fails was too strong."}]}],
+     "searches":[{"id":"revised","query":"Does the evidence support my earlier lesson that strategy A always fails in staging?","top_k":4,"evidence_alternatives":[["lesson:0","counterexample:0"]],"reference":"No. The later staging success is a counterexample to the universal claim."}]}
+  ]
+}

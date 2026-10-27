@@ -6,3 +6,8 @@ __pycache__/
 data/
 *.jsonl
 !experiments/*.example.jsonl
+/memory-system-key.txt
+.cache/
+experiments/private-runs/
+references/
+*.pdf

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .models import Memory
+from ..domain.requests import Memory
 
 
 def chunk_id(user_id: str, request_id: str) -> str:

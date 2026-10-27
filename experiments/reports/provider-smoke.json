@@ -1,0 +1,802 @@
+{
+  "status": "passed",
+  "official_score": false,
+  "stages": [
+    {
+      "op": "add",
+      "id": "old",
+      "seconds": 4.0272487000002
+    },
+    {
+      "op": "add",
+      "id": "new",
+      "seconds": 1.6029137000004994
+    },
+    {
+      "op": "add",
+      "id": "plan",
+      "seconds": 2.0111217999983637
+    },
+    {
+      "op": "search",
+      "query": "Where do I currently live?",
+      "seconds": 2.065021499998693,
+      "passed": true,
+      "response": {
+        "data": [
+          {
+            "id": "d51b22d3e0b9f7becc0d1aed6a5291ba",
+            "content": "[2024-06-15T00:00:00Z][user] In June 2024 I moved to Osaka. My current home is Osaka.",
+            "score": 0.0471386476426799,
+            "created_at": "2024-06-15T00:00:00Z"
+          }
+        ]
+      },
+      "trace": {
+        "generation": 3,
+        "policy_generation": 0,
+        "plan": {
+          "intents": [
+            "current"
+          ],
+          "entities": [],
+          "attributes": [
+            "residence"
+          ],
+          "as_of": {
+            "earliest": null,
+            "latest": null,
+            "precision": "unknown",
+            "expression": ""
+          },
+          "obligations": [
+            {
+              "id": "o1",
+              "query": "Where does the user currently live?",
+              "weight": 1.0,
+              "alternatives": [
+                [
+                  "d51b22d3e0b9f7becc0d1aed6a5291ba"
+                ]
+              ]
+            }
+          ],
+          "required_relations": [],
+          "actions": [
+            "PLAN",
+            "SEARCH",
+            "TRAVERSE",
+            "PROJECT_TIME",
+            "FIND_COUNTEREVIDENCE",
+            "DRILL_DOWN",
+            "SELECT",
+            "FINISH"
+          ]
+        },
+        "candidates": 1,
+        "selected_ids": [
+          "d51b22d3e0b9f7becc0d1aed6a5291ba"
+        ],
+        "covered_obligations": [
+          "o1"
+        ],
+        "missing_obligations": [],
+        "source_paths": [
+          {
+            "id": "7f162735cec3f6d1bdfca19ba759fbf1",
+            "origin": "7cce456aa899d2f6eccbd9a3c442e77a",
+            "target": "234319b69dfc3dfb89d9fdd02a3e8f4a",
+            "kind": "SUPPORTS",
+            "source_ids": [
+              "95db9a0d1bad8f27b095928e49fa671d"
+            ],
+            "derivation": "source_stated"
+          },
+          {
+            "id": "ec60038107e2af04130c69e9f5f8bd1c",
+            "origin": "f6eeb38dbbed99c71b40511e51efd6ec",
+            "target": "6ad39f0a4bd0cbd73fc111927b6a6010",
+            "kind": "CORRECTS",
+            "source_ids": [
+              "9d8a99234a797a9108b32477b7e19ab3",
+              "d51b22d3e0b9f7becc0d1aed6a5291ba"
+            ],
+            "derivation": "source_stated"
+          },
+          {
+            "id": "0e0d61f3b7e4a538bf717dd17f89639f",
+            "origin": "f6eeb38dbbed99c71b40511e51efd6ec",
+            "target": "6ad39f0a4bd0cbd73fc111927b6a6010",
+            "kind": "CONTRADICTS",
+            "source_ids": [
+              "9d8a99234a797a9108b32477b7e19ab3",
+              "d51b22d3e0b9f7becc0d1aed6a5291ba"
+            ],
+            "derivation": "validated_attribute_comparison"
+          },
+          {
+            "id": "d2bbedd08ac50b87bf199ee7a6bf2784",
+            "origin": "e206bb53ea8dcdca8dc2495d95b59a62",
+            "target": "f6eeb38dbbed99c71b40511e51efd6ec",
+            "kind": "CAUSE_STATED",
+            "source_ids": [
+              "d51b22d3e0b9f7becc0d1aed6a5291ba"
+            ],
+            "derivation": "source_stated"
+          }
+        ],
+        "token_cost": 53,
+        "token_budget": 101503
+      }
+    },
+    {
+      "op": "search",
+      "query": "Where did I live in January 2022?",
+      "seconds": 1.0978390999989642,
+      "passed": true,
+      "response": {
+        "data": [
+          {
+            "id": "9d8a99234a797a9108b32477b7e19ab3",
+            "content": "[2022-01-15T00:00:00Z][user] In January 2022 I lived in Kyoto.",
+            "score": 0.06557377049180328,
+            "created_at": "2022-01-15T00:00:00Z"
+          },
+          {
+            "id": "d51b22d3e0b9f7becc0d1aed6a5291ba",
+            "content": "[2024-06-15T00:00:00Z][user] In June 2024 I moved to Osaka. My current home is Osaka.",
+            "score": 0.04712301587301587,
+            "created_at": "2024-06-15T00:00:00Z"
+          }
+        ]
+      },
+      "trace": {
+        "generation": 3,
+        "policy_generation": 0,
+        "plan": {
+          "intents": [
+            "as_of"
+          ],
+          "entities": [],
+          "attributes": [
+            "residence"
+          ],
+          "as_of": {
+            "earliest": "2022-01-01",
+            "latest": "2022-01-31",
+            "precision": "month",
+            "expression": "2022-01"
+          },
+          "obligations": [
+            {
+              "id": "o1",
+              "query": "User's place of residence in January 2022",
+              "weight": 1.0,
+              "alternatives": [
+                [
+                  "9d8a99234a797a9108b32477b7e19ab3",
+                  "d51b22d3e0b9f7becc0d1aed6a5291ba"
+                ]
+              ]
+            }
+          ],
+          "required_relations": [],
+          "actions": [
+            "PLAN",
+            "SEARCH",
+            "TRAVERSE",
+            "PROJECT_TIME",
+            "FIND_COUNTEREVIDENCE",
+            "DRILL_DOWN",
+            "SELECT",
+            "FINISH"
+          ]
+        },
+        "candidates": 3,
+        "selected_ids": [
+          "9d8a99234a797a9108b32477b7e19ab3",
+          "d51b22d3e0b9f7becc0d1aed6a5291ba"
+        ],
+        "covered_obligations": [
+          "o1"
+        ],
+        "missing_obligations": [],
+        "source_paths": [
+          {
+            "id": "7f162735cec3f6d1bdfca19ba759fbf1",
+            "origin": "7cce456aa899d2f6eccbd9a3c442e77a",
+            "target": "234319b69dfc3dfb89d9fdd02a3e8f4a",
+            "kind": "SUPPORTS",
+            "source_ids": [
+              "95db9a0d1bad8f27b095928e49fa671d"
+            ],
+            "derivation": "source_stated"
+          },
+          {
+            "id": "ec60038107e2af04130c69e9f5f8bd1c",
+            "origin": "f6eeb38dbbed99c71b40511e51efd6ec",
+            "target": "6ad39f0a4bd0cbd73fc111927b6a6010",
+            "kind": "CORRECTS",
+            "source_ids": [
+              "9d8a99234a797a9108b32477b7e19ab3",
+              "d51b22d3e0b9f7becc0d1aed6a5291ba"
+            ],
+            "derivation": "source_stated"
+          },
+          {
+            "id": "0e0d61f3b7e4a538bf717dd17f89639f",
+            "origin": "f6eeb38dbbed99c71b40511e51efd6ec",
+            "target": "6ad39f0a4bd0cbd73fc111927b6a6010",
+            "kind": "CONTRADICTS",
+            "source_ids": [
+              "9d8a99234a797a9108b32477b7e19ab3",
+              "d51b22d3e0b9f7becc0d1aed6a5291ba"
+            ],
+            "derivation": "validated_attribute_comparison"
+          },
+          {
+            "id": "d2bbedd08ac50b87bf199ee7a6bf2784",
+            "origin": "e206bb53ea8dcdca8dc2495d95b59a62",
+            "target": "f6eeb38dbbed99c71b40511e51efd6ec",
+            "kind": "CAUSE_STATED",
+            "source_ids": [
+              "d51b22d3e0b9f7becc0d1aed6a5291ba"
+            ],
+            "derivation": "source_stated"
+          }
+        ],
+        "token_cost": 100,
+        "token_budget": 101499
+      }
+    }
+  ],
+  "failures": [],
+  "memory": {
+    "generation": 3,
+    "policy_generation": 0,
+    "sources": [
+      {
+        "id": "9d8a99234a797a9108b32477b7e19ab3",
+        "namespace": "b64e0e73733dadf5c897583fd73a2a9c8a0becb80da17a377d12a9ad27071622",
+        "request_id": "old",
+        "session_id": "old",
+        "ordinal": 0,
+        "role": "user",
+        "content": "In January 2022 I lived in Kyoto.",
+        "asserted_at": "2022-01-15T00:00:00Z",
+        "stored_at": "2026-10-27T09:18:41.162091Z",
+        "generation": 1
+      },
+      {
+        "id": "d51b22d3e0b9f7becc0d1aed6a5291ba",
+        "namespace": "b64e0e73733dadf5c897583fd73a2a9c8a0becb80da17a377d12a9ad27071622",
+        "request_id": "new",
+        "session_id": "new",
+        "ordinal": 0,
+        "role": "user",
+        "content": "In June 2024 I moved to Osaka. My current home is Osaka.",
+        "asserted_at": "2024-06-15T00:00:00Z",
+        "stored_at": "2026-10-27T09:18:45.188691Z",
+        "generation": 2
+      },
+      {
+        "id": "95db9a0d1bad8f27b095928e49fa671d",
+        "namespace": "b64e0e73733dadf5c897583fd73a2a9c8a0becb80da17a377d12a9ad27071622",
+        "request_id": "plan",
+        "session_id": "plan",
+        "ordinal": 0,
+        "role": "user",
+        "content": "I plan to move to Tokyo in 2028. This is only a future plan.",
+        "asserted_at": "2024-06-16T00:00:00Z",
+        "stored_at": "2026-10-27T09:18:46.791142Z",
+        "generation": 3
+      }
+    ],
+    "spans": [
+      {
+        "id": "0ad45688cc7d55907e80dbb45c0205c8",
+        "source_id": "9d8a99234a797a9108b32477b7e19ab3",
+        "byte_start": 0,
+        "byte_end": 33,
+        "text_hash": "03153d9ba9dbd0ad83461ddeac7e9795686b458ad5ddd9f9279f8ceca4efe2b1",
+        "quote": "In January 2022 I lived in Kyoto."
+      },
+      {
+        "id": "2a4e1fe614a30b5c248fb776dd34d64a",
+        "source_id": "d51b22d3e0b9f7becc0d1aed6a5291ba",
+        "byte_start": 0,
+        "byte_end": 30,
+        "text_hash": "1686daeaba676fbdac9ace8404d51307eb1a4e51a07727020911900e43120de3",
+        "quote": "In June 2024 I moved to Osaka."
+      },
+      {
+        "id": "102a4a4a5324704901509f90e8672cca",
+        "source_id": "d51b22d3e0b9f7becc0d1aed6a5291ba",
+        "byte_start": 31,
+        "byte_end": 56,
+        "text_hash": "fce3a1e5169560390ec89ea4d262a0fbac28a59747c565e6102629c74f12d377",
+        "quote": "My current home is Osaka."
+      },
+      {
+        "id": "95ea91920d2ac28a507864a853c4df75",
+        "source_id": "d51b22d3e0b9f7becc0d1aed6a5291ba",
+        "byte_start": 0,
+        "byte_end": 56,
+        "text_hash": "2483e2348bd08651b850a82198381e878e0cea45a85086870b0f7b9dcb64e4e6",
+        "quote": "In June 2024 I moved to Osaka. My current home is Osaka."
+      },
+      {
+        "id": "b487ceff9517f8e08d901c046715e084",
+        "source_id": "95db9a0d1bad8f27b095928e49fa671d",
+        "byte_start": 0,
+        "byte_end": 32,
+        "text_hash": "3efb3f39f221c198c7fa4fd5efc114d2552ccc7a2ee200636f742ed6b874b8e8",
+        "quote": "I plan to move to Tokyo in 2028."
+      },
+      {
+        "id": "9bef7a2bf36d68f4e0bca40c86e065e3",
+        "source_id": "95db9a0d1bad8f27b095928e49fa671d",
+        "byte_start": 33,
+        "byte_end": 60,
+        "text_hash": "96c2b9f2a8262700c1764862c0077f167dc96f22814dc8a28669be91d2b99428",
+        "quote": "This is only a future plan."
+      }
+    ],
+    "nodes": [
+      {
+        "id": "6ad39f0a4bd0cbd73fc111927b6a6010",
+        "kind": "fact",
+        "subject": "user",
+        "predicate": "residence",
+        "value": "Kyoto",
+        "source_ids": [
+          "9d8a99234a797a9108b32477b7e19ab3"
+        ],
+        "span_ids": [
+          "0ad45688cc7d55907e80dbb45c0205c8"
+        ],
+        "scope": "general",
+        "modality": "asserted",
+        "cardinality": "single",
+        "change": "assertion",
+        "valid_time": {
+          "earliest": "2022-01-01",
+          "latest": "2022-01-31",
+          "precision": "month",
+          "expression": "January 2022"
+        },
+        "occurrence_time": {
+          "earliest": null,
+          "latest": null,
+          "precision": "unknown",
+          "expression": "January 2022"
+        },
+        "asserted_at": "2022-01-15T00:00:00Z",
+        "tier": "long_term",
+        "state": "supported",
+        "protected": true,
+        "support_ids": [],
+        "counterexample_ids": [],
+        "confidence": 0.5,
+        "generation": 2
+      },
+      {
+        "id": "f6eeb38dbbed99c71b40511e51efd6ec",
+        "kind": "fact",
+        "subject": "user",
+        "predicate": "residence",
+        "value": "Osaka",
+        "source_ids": [
+          "d51b22d3e0b9f7becc0d1aed6a5291ba"
+        ],
+        "span_ids": [
+          "102a4a4a5324704901509f90e8672cca"
+        ],
+        "scope": "general",
+        "modality": "asserted",
+        "cardinality": "single",
+        "change": "change",
+        "valid_time": {
+          "earliest": null,
+          "latest": null,
+          "precision": "unknown",
+          "expression": ""
+        },
+        "occurrence_time": {
+          "earliest": null,
+          "latest": null,
+          "precision": "unknown",
+          "expression": ""
+        },
+        "asserted_at": "2024-06-15T00:00:00Z",
+        "tier": "long_term",
+        "state": "supported",
+        "protected": false,
+        "support_ids": [],
+        "counterexample_ids": [],
+        "confidence": 0.5,
+        "generation": 2
+      },
+      {
+        "id": "a6a0d444d9a7a534249f288b59d1aef7",
+        "kind": "summary",
+        "subject": "user",
+        "predicate": "residence",
+        "value": "Osaka\nKyoto",
+        "source_ids": [
+          "9d8a99234a797a9108b32477b7e19ab3",
+          "d51b22d3e0b9f7becc0d1aed6a5291ba"
+        ],
+        "span_ids": [
+          "0ad45688cc7d55907e80dbb45c0205c8",
+          "102a4a4a5324704901509f90e8672cca"
+        ],
+        "scope": "general",
+        "modality": "asserted",
+        "cardinality": "multi",
+        "change": "assertion",
+        "valid_time": {
+          "earliest": null,
+          "latest": null,
+          "precision": "unknown",
+          "expression": ""
+        },
+        "occurrence_time": {
+          "earliest": null,
+          "latest": null,
+          "precision": "unknown",
+          "expression": ""
+        },
+        "asserted_at": null,
+        "tier": "scenario",
+        "state": "supported",
+        "protected": true,
+        "support_ids": [
+          "f6eeb38dbbed99c71b40511e51efd6ec",
+          "6ad39f0a4bd0cbd73fc111927b6a6010"
+        ],
+        "counterexample_ids": [],
+        "confidence": 0.0,
+        "generation": 2
+      },
+      {
+        "id": "e206bb53ea8dcdca8dc2495d95b59a62",
+        "kind": "event",
+        "subject": "user",
+        "predicate": "residence_move",
+        "value": "moved to Osaka",
+        "source_ids": [
+          "d51b22d3e0b9f7becc0d1aed6a5291ba"
+        ],
+        "span_ids": [
+          "2a4e1fe614a30b5c248fb776dd34d64a"
+        ],
+        "scope": "general",
+        "modality": "asserted",
+        "cardinality": "single",
+        "change": "assertion",
+        "valid_time": {
+          "earliest": "2024-06-01",
+          "latest": "2024-06-30",
+          "precision": "month",
+          "expression": "June 2024"
+        },
+        "occurrence_time": {
+          "earliest": "2024-06-01",
+          "latest": "2024-06-30",
+          "precision": "month",
+          "expression": "June 2024"
+        },
+        "asserted_at": "2024-06-15T00:00:00Z",
+        "tier": "long_term",
+        "state": "supported",
+        "protected": true,
+        "support_ids": [],
+        "counterexample_ids": [],
+        "confidence": 0.5,
+        "generation": 3
+      },
+      {
+        "id": "234319b69dfc3dfb89d9fdd02a3e8f4a",
+        "kind": "event",
+        "subject": "user",
+        "predicate": "residence_move",
+        "value": "move to Tokyo",
+        "source_ids": [
+          "95db9a0d1bad8f27b095928e49fa671d"
+        ],
+        "span_ids": [
+          "b487ceff9517f8e08d901c046715e084"
+        ],
+        "scope": "general",
+        "modality": "planned",
+        "cardinality": "single",
+        "change": "assertion",
+        "valid_time": {
+          "earliest": "2028-01-01",
+          "latest": "2028-12-31",
+          "precision": "year",
+          "expression": "in 2028"
+        },
+        "occurrence_time": {
+          "earliest": "2028-01-01",
+          "latest": "2028-12-31",
+          "precision": "year",
+          "expression": "in 2028"
+        },
+        "asserted_at": "2024-06-16T00:00:00Z",
+        "tier": "long_term",
+        "state": "supported",
+        "protected": true,
+        "support_ids": [],
+        "counterexample_ids": [],
+        "confidence": 0.5,
+        "generation": 3
+      },
+      {
+        "id": "7cce456aa899d2f6eccbd9a3c442e77a",
+        "kind": "fact",
+        "subject": "user",
+        "predicate": "tokyo_move_status",
+        "value": "future plan only, not current",
+        "source_ids": [
+          "95db9a0d1bad8f27b095928e49fa671d"
+        ],
+        "span_ids": [
+          "9bef7a2bf36d68f4e0bca40c86e065e3"
+        ],
+        "scope": "general",
+        "modality": "asserted",
+        "cardinality": "single",
+        "change": "assertion",
+        "valid_time": {
+          "earliest": null,
+          "latest": null,
+          "precision": "unknown",
+          "expression": ""
+        },
+        "occurrence_time": {
+          "earliest": null,
+          "latest": null,
+          "precision": "unknown",
+          "expression": ""
+        },
+        "asserted_at": "2024-06-16T00:00:00Z",
+        "tier": "hot",
+        "state": "supported",
+        "protected": true,
+        "support_ids": [],
+        "counterexample_ids": [],
+        "confidence": 0.5,
+        "generation": 3
+      },
+      {
+        "id": "56a9517509334116adab81f41e88a135",
+        "kind": "summary",
+        "subject": "user",
+        "predicate": "residence_move",
+        "value": "move to Tokyo\nmoved to Osaka",
+        "source_ids": [
+          "95db9a0d1bad8f27b095928e49fa671d",
+          "d51b22d3e0b9f7becc0d1aed6a5291ba"
+        ],
+        "span_ids": [
+          "2a4e1fe614a30b5c248fb776dd34d64a",
+          "b487ceff9517f8e08d901c046715e084"
+        ],
+        "scope": "general",
+        "modality": "asserted",
+        "cardinality": "multi",
+        "change": "assertion",
+        "valid_time": {
+          "earliest": null,
+          "latest": null,
+          "precision": "unknown",
+          "expression": ""
+        },
+        "occurrence_time": {
+          "earliest": null,
+          "latest": null,
+          "precision": "unknown",
+          "expression": ""
+        },
+        "asserted_at": null,
+        "tier": "scenario",
+        "state": "supported",
+        "protected": true,
+        "support_ids": [
+          "234319b69dfc3dfb89d9fdd02a3e8f4a",
+          "e206bb53ea8dcdca8dc2495d95b59a62"
+        ],
+        "counterexample_ids": [],
+        "confidence": 0.0,
+        "generation": 3
+      }
+    ],
+    "edges": [
+      {
+        "id": "ec60038107e2af04130c69e9f5f8bd1c",
+        "origin": "f6eeb38dbbed99c71b40511e51efd6ec",
+        "target": "6ad39f0a4bd0cbd73fc111927b6a6010",
+        "kind": "CORRECTS",
+        "source_ids": [
+          "9d8a99234a797a9108b32477b7e19ab3",
+          "d51b22d3e0b9f7becc0d1aed6a5291ba"
+        ],
+        "derivation": "source_stated"
+      },
+      {
+        "id": "0e0d61f3b7e4a538bf717dd17f89639f",
+        "origin": "f6eeb38dbbed99c71b40511e51efd6ec",
+        "target": "6ad39f0a4bd0cbd73fc111927b6a6010",
+        "kind": "CONTRADICTS",
+        "source_ids": [
+          "9d8a99234a797a9108b32477b7e19ab3",
+          "d51b22d3e0b9f7becc0d1aed6a5291ba"
+        ],
+        "derivation": "validated_attribute_comparison"
+      },
+      {
+        "id": "d2bbedd08ac50b87bf199ee7a6bf2784",
+        "origin": "e206bb53ea8dcdca8dc2495d95b59a62",
+        "target": "f6eeb38dbbed99c71b40511e51efd6ec",
+        "kind": "CAUSE_STATED",
+        "source_ids": [
+          "d51b22d3e0b9f7becc0d1aed6a5291ba"
+        ],
+        "derivation": "source_stated"
+      },
+      {
+        "id": "7f162735cec3f6d1bdfca19ba759fbf1",
+        "origin": "7cce456aa899d2f6eccbd9a3c442e77a",
+        "target": "234319b69dfc3dfb89d9fdd02a3e8f4a",
+        "kind": "SUPPORTS",
+        "source_ids": [
+          "95db9a0d1bad8f27b095928e49fa671d"
+        ],
+        "derivation": "source_stated"
+      }
+    ],
+    "operations": [
+      {
+        "generation": 1,
+        "kind": "publish",
+        "details": {
+          "sources": 1,
+          "nodes": 1,
+          "edges": 0,
+          "policies": 0,
+          "base_generation": 0
+        }
+      },
+      {
+        "generation": 2,
+        "kind": "publish",
+        "details": {
+          "sources": 1,
+          "nodes": 4,
+          "edges": 3,
+          "policies": 0,
+          "base_generation": 1
+        }
+      },
+      {
+        "generation": 3,
+        "kind": "publish",
+        "details": {
+          "sources": 1,
+          "nodes": 4,
+          "edges": 1,
+          "policies": 0,
+          "base_generation": 2
+        }
+      }
+    ]
+  },
+  "usage": {
+    "chat_calls": 6,
+    "embedding_calls": 5,
+    "input_tokens": 4649,
+    "output_tokens": 767
+  },
+  "manifest": {
+    "kind": "research",
+    "commit": "1e6f8c199fb6b3d3f5dd33a29a339bc1627d89d9",
+    "dirty": true,
+    "source_hashes": {
+      "eviepoch/__init__.py": "90f05c9941f5ff4cc7942d53118efc1afc50642b9e093873d7dbb2842fea4380",
+      "eviepoch/api.py": "54f3440f0906304de31ca421284e11f8715ffa74b9b69c3abc82450cdf3138a9",
+      "eviepoch/baseline.py": "86a53a99eb4e4fa84866e04bddb342843cc4b5ce49854da18e184c762d57f698",
+      "eviepoch/config.py": "c1742fbfc6a0819c75e517a8db6088a39331a56c9f9becf6ae6a145e9c839771",
+      "eviepoch/domain.py": "ea11e7f37f421308d04263e8043acd4ae9e17bd76863e65db9ca348243990832",
+      "eviepoch/extraction.py": "cbe8fd9c5507df6b284de9dfea0e22611dd65f734f316cf442e083d7d88f1313",
+      "eviepoch/lexical.py": "c40214fb2e22a917ccbbaf47f971d0575534dcf5bf038dde7b9e25ba522906ce",
+      "eviepoch/management.py": "0cbed2c086f9c5e31ad3a7b27f5b60a8c0273b0c4b40e0db2a2e283af2eb89ab",
+      "eviepoch/manifest.py": "91e2f66686ed891817e3bf598233a4ec6a6b95050bf52a54cd6f8464893f525b",
+      "eviepoch/migrate.py": "ae5eb2e7730a54a76e743eb169b8762a9d5e6cc92e8cef933b0068821661f9c8",
+      "eviepoch/models.py": "5cd3d7f0335615a54b6c0192e29515a1feddbcfc7d2ccf3478d888c94a8c04be",
+      "eviepoch/pipeline.py": "fba103144510668aa372be3792cca56c5ade3d260a8f500bbc8d31d8ede9a94c",
+      "eviepoch/providers.py": "db11b8ac603b79f273fe029d6779482adee5c1d13b1b59e7514cad5fb82acdf7",
+      "eviepoch/repository.py": "6755818e65bc5fb436ecc268b66111aedb5946dee9fbaaf85aec1253d96b3fc9",
+      "eviepoch/retrieval.py": "7a4a2574b4d3a1c2b1b60f39d624cb70a23b85c41a644fd982237e2875ce35bd",
+      "eviepoch/storage.py": "79d5ae7c3b3de73445ab584bf12f1489ff47e23e3a80833651e533de373084ed",
+      "eviepoch/tokens.py": "89edf023ae15ab829c7855c218c2392d35d210f9c14ba2486c8308e9f9c83e77",
+      "eviepoch/workbench.html": "ebf5a7023d6c0d73b48dc6734d8e101fc64565c288c1385b03ecf14d3d663b64"
+    },
+    "image_digest": null,
+    "smoke_id": null,
+    "schema": 1,
+    "configuration": {
+      "profile": "full",
+      "model_policy": "research",
+      "selector": "beam",
+      "candidate_limit": 120,
+      "graph_depth": 3,
+      "graph_budget": 512,
+      "beam_width": 12,
+      "gap_iterations": 1,
+      "relations_enabled": true,
+      "consolidation_enabled": true,
+      "reflection_enabled": true,
+      "workbench_enabled": true,
+      "rerank_url": {
+        "host": null,
+        "path": ""
+      },
+      "add_concurrency": 16,
+      "search_concurrency": 32,
+      "extraction_chars": 24000,
+      "llm_base_url": {
+        "host": "api.deepseek.com",
+        "path": ""
+      },
+      "llm_model": "deepseek-flash",
+      "embed_base_url": {
+        "host": "llm-em3sdsayd55k5l7n.cn-beijing.maas.aliyuncs.com",
+        "path": "/compatible-mode/v1"
+      },
+      "embed_model": "text-embedding-v4",
+      "embed_dimensions": 1024,
+      "auth_scheme": "none",
+      "extract_facts": true,
+      "recall_query": true,
+      "recall_weight": 0.5,
+      "return_limit": 100,
+      "char_budget": 400000,
+      "window_radius": 1,
+      "raw_first": true,
+      "answer_input_tokens": 117760,
+      "answer_prompt_tokens": 1024,
+      "answer_item_tokens": 20,
+      "token_safety": 1.15,
+      "request_timeout": 40.0,
+      "max_facts": 24
+    },
+    "prompts": {
+      "extract": {
+        "version": "source-graph-v1",
+        "sha256": "2f81919ba3b3078566ffdabf56045bfc22ee45d61d042f3a90fdaa21c29ca5ec"
+      },
+      "plan": {
+        "version": "evidence-obligations-v1",
+        "sha256": "68e3989090a42eca1daa2195e4e89ea8b65eb45b3572632e5ba79602f0d4fd6c"
+      }
+    },
+    "tokenizer": "o200k_base; conservative UTF-8 bytes fallback",
+    "lexical": "words-cjk-bigrams-v1",
+    "retrieval": "rrf-proof-beam-v1",
+    "competition_model_policy_satisfied": false,
+    "release_gates": {
+      "fixed_clean_commit": false,
+      "public_https_smoke": false,
+      "real_provider_capacity": false,
+      "license_and_attribution": false
+    },
+    "data_retention": {
+      "private_text_logs": false,
+      "workbench_enabled": true,
+      "backup_erasure": "operator-managed; not verified by this manifest"
+    },
+    "manifest_hash": "f5ca4895b4217f51dcceabe8b3f840f751990e1642d6ed1a510ff3e20081e1e1"
+  }
+}

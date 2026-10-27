@@ -45,6 +45,7 @@ class PipelineTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[1])
         self.config = Settings(
+            profile="b0",
             db_path=str(Path(self.temp.name) / "memory.sqlite3"),
             llm_api_key="test-key",
             embed_api_key="test-key",

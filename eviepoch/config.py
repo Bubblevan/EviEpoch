@@ -27,7 +27,24 @@ def _bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    db_path: str = "./data/eviepoch.sqlite3"
+    db_path: str = "./data/eviepoch-v1.sqlite3"
+    database_url: str = ""
+    profile: str = "full"
+    model_policy: str = "competition"
+    selector: str = "beam"
+    candidate_limit: int = 120
+    graph_depth: int = 3
+    graph_budget: int = 512
+    beam_width: int = 12
+    gap_iterations: int = 1
+    relations_enabled: bool = True
+    consolidation_enabled: bool = True
+    reflection_enabled: bool = True
+    workbench_enabled: bool = False
+    rerank_url: str = ""
+    add_concurrency: int = 16
+    search_concurrency: int = 32
+    extraction_chars: int = 24000
     llm_api_key: str = ""
     llm_base_url: str = ""
     llm_model: str = "gpt-4o-mini"
@@ -54,7 +71,24 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
-            db_path=os.getenv("EPOCH_DB_PATH", "./data/eviepoch.sqlite3"),
+            db_path=os.getenv("EPOCH_DB_PATH", "./data/eviepoch-v1.sqlite3"),
+            database_url=os.getenv("EPOCH_DATABASE_URL", ""),
+            profile=os.getenv("EPOCH_PROFILE", "full"),
+            model_policy=os.getenv("EPOCH_MODEL_POLICY", "competition"),
+            selector=os.getenv("EPOCH_SELECTOR", "beam"),
+            candidate_limit=_int("EPOCH_CANDIDATE_LIMIT", 120),
+            graph_depth=_int("EPOCH_GRAPH_DEPTH", 3),
+            graph_budget=_int("EPOCH_GRAPH_BUDGET", 512),
+            beam_width=_int("EPOCH_BEAM_WIDTH", 12),
+            gap_iterations=_int("EPOCH_GAP_ITERATIONS", 1),
+            relations_enabled=_bool("EPOCH_RELATIONS", True),
+            consolidation_enabled=_bool("EPOCH_CONSOLIDATION", True),
+            reflection_enabled=_bool("EPOCH_REFLECTION", True),
+            workbench_enabled=_bool("EPOCH_WORKBENCH", False),
+            rerank_url=os.getenv("EPOCH_RERANK_URL", ""),
+            add_concurrency=_int("EPOCH_ADD_CONCURRENCY", 16),
+            search_concurrency=_int("EPOCH_SEARCH_CONCURRENCY", 32),
+            extraction_chars=_int("EPOCH_EXTRACTION_CHARS", 24000),
             llm_api_key=os.getenv("OPENAI_API_KEY", ""),
             llm_base_url=os.getenv("EPOCH_LLM_BASE_URL", ""),
             llm_model=os.getenv("EPOCH_LLM_MODEL", "gpt-4o-mini"),
@@ -84,6 +118,19 @@ class Settings:
         return bool(self.llm_api_key)
 
     def validate(self) -> None:
+        if self.profile not in {"full", "hybrid", "b0"} or self.selector not in {"beam", "greedy", "topk"}:
+            raise ValueError("Unknown profile or selector")
+        if min(self.candidate_limit, self.graph_budget, self.beam_width, self.add_concurrency, self.search_concurrency) <= 0:
+            raise ValueError("Candidate, graph, beam and concurrency budgets must be positive")
+        if not 0 <= self.graph_depth <= 6 or not 0 <= self.gap_iterations <= 1 or self.extraction_chars < 256:
+            raise ValueError("Invalid graph, gap or extraction budget")
+        if self.model_policy not in {"competition", "research"}:
+            raise ValueError("EPOCH_MODEL_POLICY must be competition or research")
+        if self.profile == "full":
+            if not self.llm_enabled or not self.extract_facts:
+                raise ValueError("The full profile requires structured extraction and a configured LLM")
+            if self.model_policy == "competition" and (self.llm_model != "gpt-4o-mini" or self.embed_model != "text-embedding-v4"):
+                raise ValueError("Competition full profile requires gpt-4o-mini and text-embedding-v4")
         if self.auth_scheme not in {"none", "bearer", "token", "x-api-key"}:
             raise ValueError("EPOCH_AUTH_SCHEME must be none, bearer, token, or x-api-key")
         if self.auth_scheme != "none" and not self.auth_token:
