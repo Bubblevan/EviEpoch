@@ -59,13 +59,15 @@ PROTECTED = re.compile(r"\d|\b(?:not|never|no|except|allerg|must|cannot|only)\b|
 
 
 def _text(value, name: str, default=None) -> str:
+    if not isinstance(value, dict):
+        raise InvalidExtraction("structured item must be an object")
     value = value.get(name, default)
     if not isinstance(value, str):
         raise InvalidExtraction(f"{name} must be a string")
     return value
 
 
-def validate_extraction(data: dict, sources: list[Source], known: Snapshot, max_nodes: int):
+def validate_extraction(data: dict, sources: list[Source], known: Snapshot, max_nodes: int, windows=None):
     if not isinstance(data, dict):
         raise InvalidExtraction("extraction must be an object")
     for key in ("nodes", "relations", "governance"):
@@ -76,11 +78,15 @@ def validate_extraction(data: dict, sources: list[Source], known: Snapshot, max_
     spans, nodes, edges, policies, local = {}, [], [], [], {}
 
     def anchor(item):
+        if not isinstance(item, dict):
+            raise InvalidExtraction("anchored item must be an object")
         i = item.get("message")
         if type(i) is not int or not 0 <= i < len(sources):
             raise InvalidExtraction("message ordinal is invalid")
         source = sources[i]
-        span = locate(source, _text(item, "quote"))
+        start, end = windows[i] if windows else (0, len(source.content))
+        span = locate(source, _text(item, "quote"), char_start=start, char_end=end,
+                      occurrence=item.get("quote_occurrence"))
         spans[span.id] = span
         return source, span
 
@@ -109,7 +115,9 @@ def validate_extraction(data: dict, sources: list[Source], known: Snapshot, max_
         time_quote = _text(item, "time_quote", "")
         if valid.earliest or event.earliest:
             if time_quote:
-                locate(source, time_quote)
+                index = item["message"]
+                start, end = windows[index] if windows else (0, len(source.content))
+                locate(source, time_quote, char_start=start, char_end=end, occurrence=0)
                 valid.expression = event.expression = time_quote
             elif not source.asserted_at or any(
                 bound.earliest and not source.asserted_at.startswith(bound.earliest[:len(bound.expression)])
@@ -126,9 +134,10 @@ def validate_extraction(data: dict, sources: list[Source], known: Snapshot, max_
     all_nodes = {**known.nodes, **{n.id: n for n in nodes}}
     for item in data["relations"]:
         source, _span = anchor(item)
-        origin = local.get(item.get("from"), item.get("from"))
-        target = local.get(item.get("to"), item.get("to"))
-        kind = item.get("kind")
+        origin_key, target_key = _text(item, "from"), _text(item, "to")
+        origin = local.get(origin_key, origin_key)
+        target = local.get(target_key, target_key)
+        kind = _text(item, "kind")
         if origin not in all_nodes or target not in all_nodes or kind not in RELATIONS or origin == target:
             raise InvalidExtraction("relation endpoints or type are invalid")
         # Relocation does not retrospectively make a truthful old address a mistaken statement.
@@ -144,10 +153,14 @@ def validate_extraction(data: dict, sources: list[Source], known: Snapshot, max_
     known_sources = set(known.sources) | {s.id for s in sources}
     for item in data["governance"]:
         source, _span = anchor(item)
-        if source.role != "user" or item.get("action") not in {"suppress", "erase", "deactivate"}:
+        action = _text(item, "action")
+        if source.role != "user" or action not in {"suppress", "erase", "deactivate"}:
             raise InvalidExtraction("governance requires a user instruction and valid action")
         refs = set()
-        for oid in item.get("target_ids", []):
+        target_ids = item.get("target_ids", [])
+        if not isinstance(target_ids, list) or not all(isinstance(oid, str) for oid in target_ids):
+            raise InvalidExtraction("governance targets must be string IDs")
+        for oid in target_ids:
             if oid in known.nodes:
                 refs.update(known.nodes[oid].source_ids)
             elif oid in known_sources:
@@ -166,10 +179,18 @@ def validate_extraction(data: dict, sources: list[Source], known: Snapshot, max_
     return list(spans.values()), nodes, edges, policies
 
 
-def extraction_input(sources: list[Source], known: Snapshot) -> str:
+def extraction_input(sources: list[Source], known: Snapshot, max_context_tokens=8000) -> str:
+    from ..retrieval.tokens import count
+    context, remaining = [], max_context_tokens
+    for node in known.nodes.values():
+        row = asdict(node)
+        cost = count(json.dumps(row, ensure_ascii=False))
+        if cost <= remaining:
+            context.append(row)
+            remaining -= cost
     return json.dumps({"messages": [{"ordinal": i, "role": s.role, "content": s.content,
                                     "asserted_at": s.asserted_at} for i, s in enumerate(sources)],
-                       "known_nodes": [asdict(n) for n in known.nodes.values()]}, ensure_ascii=False)
+                       "known_nodes": context}, ensure_ascii=False)
 
 
 def parse_plan(data: dict, query: str) -> QueryPlan:
@@ -177,7 +198,7 @@ def parse_plan(data: dict, query: str) -> QueryPlan:
         raise InvalidExtraction("query plan must be an object")
     intents = data.get("intents", ["fact"])
     allowed = {"current", "as_of", "history", "comparison", "order", "why", "procedure", "list", "global", "fact"}
-    if not isinstance(intents, list) or not set(intents) <= allowed:
+    if not isinstance(intents, list) or not all(isinstance(v, str) for v in intents) or not set(intents) <= allowed:
         raise InvalidExtraction("invalid query intent")
     entities, attrs, relations = (data.get(k, []) for k in ("entities", "attributes", "required_relations"))
     if any(not isinstance(items, list) or not all(isinstance(v, str) for v in items) for items in (entities, attrs, relations)):
@@ -190,7 +211,10 @@ def parse_plan(data: dict, query: str) -> QueryPlan:
     obligations = []
     for i, row in enumerate(rows):
         text = _text(row, "query")
-        weight = float(row.get("weight", 1.0))
+        try:
+            weight = float(row.get("weight", 1.0))
+        except (TypeError, ValueError) as exc:
+            raise InvalidExtraction("invalid obligation weight") from exc
         if not 0 < weight <= 5:
             raise InvalidExtraction("invalid obligation weight")
         obligations.append(Obligation(f"o{i + 1}", text, weight))

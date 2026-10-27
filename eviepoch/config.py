@@ -40,11 +40,16 @@ class Settings:
     relations_enabled: bool = True
     consolidation_enabled: bool = True
     reflection_enabled: bool = True
+    proof_binding_enabled: bool = True
     workbench_enabled: bool = False
     rerank_url: str = ""
     add_concurrency: int = 16
     search_concurrency: int = 32
     extraction_chars: int = 24000
+    extraction_split_depth: int = 4
+    extraction_max_calls: int = 128
+    extraction_deadline_seconds: float = 300.0
+    extraction_input_tokens: int = 24000
     llm_api_key: str = ""
     llm_base_url: str = ""
     llm_model: str = "gpt-4o-mini"
@@ -84,11 +89,16 @@ class Settings:
             relations_enabled=_bool("EPOCH_RELATIONS", True),
             consolidation_enabled=_bool("EPOCH_CONSOLIDATION", True),
             reflection_enabled=_bool("EPOCH_REFLECTION", True),
+            proof_binding_enabled=_bool("EPOCH_PROOF_BINDING", True),
             workbench_enabled=_bool("EPOCH_WORKBENCH", False),
             rerank_url=os.getenv("EPOCH_RERANK_URL", ""),
             add_concurrency=_int("EPOCH_ADD_CONCURRENCY", 16),
             search_concurrency=_int("EPOCH_SEARCH_CONCURRENCY", 32),
             extraction_chars=_int("EPOCH_EXTRACTION_CHARS", 24000),
+            extraction_split_depth=_int("EPOCH_EXTRACTION_SPLIT_DEPTH", 4),
+            extraction_max_calls=_int("EPOCH_EXTRACTION_MAX_CALLS", 128),
+            extraction_deadline_seconds=_float("EPOCH_EXTRACTION_DEADLINE_SECONDS", 300.0),
+            extraction_input_tokens=_int("EPOCH_EXTRACTION_INPUT_TOKENS", 24000),
             llm_api_key=os.getenv("OPENAI_API_KEY", ""),
             llm_base_url=os.getenv("EPOCH_LLM_BASE_URL", ""),
             llm_model=os.getenv("EPOCH_LLM_MODEL", "gpt-4o-mini"),
@@ -124,6 +134,10 @@ class Settings:
             raise ValueError("Candidate, graph, beam and concurrency budgets must be positive")
         if not 0 <= self.graph_depth <= 6 or not 0 <= self.gap_iterations <= 1 or self.extraction_chars < 256:
             raise ValueError("Invalid graph, gap or extraction budget")
+        if (not 0 <= self.extraction_split_depth <= 8 or self.extraction_max_calls <= 0
+                or self.extraction_input_tokens < 2048
+                or not math.isfinite(self.extraction_deadline_seconds) or self.extraction_deadline_seconds <= 0):
+            raise ValueError("Invalid bounded extraction retry policy")
         if self.model_policy not in {"competition", "research"}:
             raise ValueError("EPOCH_MODEL_POLICY must be competition or research")
         if self.profile == "full":

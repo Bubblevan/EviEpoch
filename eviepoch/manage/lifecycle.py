@@ -30,9 +30,15 @@ def reconcile(new: list[Node], edges: list[Edge], old: Snapshot, *, consolidate=
                 link(node, previous, "SUPPORTS")
             elif node.cardinality == previous.cardinality == "single":
                 if node.change == "correction":
-                    link(node, previous, "CORRECTS")
+                    if node.change_verified and previous.id in node.change_targets:
+                        link(node, previous, "CORRECTS")
+                    elif not node.change_targets:
+                        link(node, previous, "CONTRADICTS")
                 elif node.change == "retraction":
-                    link(node, previous, "RETRACTS")
+                    if node.change_verified and previous.id in node.change_targets:
+                        link(node, previous, "RETRACTS")
+                    elif not node.change_targets:
+                        link(node, previous, "CONTRADICTS")
                 elif (node.change == "change" and node.valid_time.earliest and previous.valid_time.latest
                       and node.valid_time.earliest > previous.valid_time.latest):
                     link(node, previous, "SUPERSEDES")

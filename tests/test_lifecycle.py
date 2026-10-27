@@ -54,6 +54,12 @@ class AnnotatedProviders:
     def verify_candidates(self, query, sources):
         return {sid for sid, source in sources.items() if set(terms(query)) & set(terms(source.content))}
 
+    def verify_changes(self, proposed, sources, known):
+        return {"decisions": [{"id": n.id, "classification": n.change, "target_ids": [
+            p.id for p in known.nodes.values() if p.key == n.key and p.kind != "summary"
+            and p.modality == n.modality and p.value != n.value
+        ]} for n in proposed]}
+
     def embed(self, texts):
         if self.fail_embed:
             raise ProviderUnavailable("synthetic failure")

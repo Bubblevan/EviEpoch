@@ -1,0 +1,120 @@
+{
+  "scope": "self-authored public long input; DeepSeek research, not official capacity",
+  "source_characters": 50706,
+  "messages": 3,
+  "fault": "first real extraction completion capped to 48 output tokens",
+  "status": "passed",
+  "add_seconds": 12.620716800000082,
+  "source_roundtrip": true,
+  "span_integrity": true,
+  "rare_constraint_extracted": true,
+  "search_seconds": 1.471099200000026,
+  "rare_constraint_recovered": true,
+  "search_trace": {
+    "generation": 1,
+    "policy_generation": 0,
+    "plan": {
+      "intents": [
+        "fact"
+      ],
+      "entities": [],
+      "attributes": [
+        "dietary restrictions"
+      ],
+      "as_of": {
+        "earliest": null,
+        "latest": null,
+        "precision": "unknown",
+        "expression": ""
+      },
+      "obligations": [
+        {
+          "id": "o1",
+          "query": "用户必须遵守的饮食限制",
+          "weight": 1.0,
+          "alternatives": [
+            [
+              "53af969e21b1537098c1740d6e76199d"
+            ]
+          ]
+        }
+      ],
+      "required_relations": [],
+      "actions": [
+        "PLAN",
+        "SEARCH",
+        "TRAVERSE",
+        "PROJECT_TIME",
+        "FIND_COUNTEREVIDENCE",
+        "DRILL_DOWN",
+        "SELECT",
+        "FINISH"
+      ]
+    },
+    "candidates": 3,
+    "selected_ids": [
+      "53af969e21b1537098c1740d6e76199d"
+    ],
+    "binding_status": "bound",
+    "selection_status": "proof_selected",
+    "covered_obligations": [
+      "o1"
+    ],
+    "missing_obligations": [],
+    "source_paths": [
+      {
+        "id": "a9395a37c0f64362a8154bc66a495b0f",
+        "origin": "0fa2ec727368c674bb3c098bab510dfd",
+        "target": "f00b551448a240f892e0a240321f64a7",
+        "kind": "REQUIRES",
+        "source_ids": [
+          "53af969e21b1537098c1740d6e76199d"
+        ],
+        "derivation": "source_stated"
+      }
+    ],
+    "channel_ranks": {
+      "53af969e21b1537098c1740d6e76199d": {
+        "dense:q0_rank": 3,
+        "lexical:q0_rank": 1,
+        "dense:q1_rank": 4,
+        "lexical:q1_rank": 1
+      },
+      "35299db2b4e605a2a44dba2450f96574": {
+        "dense:q0_rank": 7,
+        "dense:q1_rank": 6,
+        "lexical:q1_rank": 2
+      },
+      "0fa2ec727368c674bb3c098bab510dfd": {
+        "dense:q0_rank": 1,
+        "dense:q1_rank": 1
+      },
+      "f00b551448a240f892e0a240321f64a7": {
+        "dense:q0_rank": 2,
+        "dense:q1_rank": 2
+      },
+      "b2f5c738aaddb03d0b682ce7b933814f": {
+        "dense:q0_rank": 4,
+        "dense:q1_rank": 3
+      },
+      "5a37072a61bb90194287105519453eea": {
+        "dense:q0_rank": 5,
+        "dense:q1_rank": 5
+      },
+      "1a23805960b6659cf33e46177c775e50": {
+        "dense:q0_rank": 6,
+        "dense:q1_rank": 7
+      }
+    },
+    "token_cost": 35280,
+    "token_budget": 101499
+  },
+  "observed_real_truncations": 1,
+  "usage": {
+    "chat_calls": 8,
+    "embedding_calls": 9,
+    "input_tokens": 75661,
+    "output_tokens": 602
+  },
+  "committed_generation": 1
+}

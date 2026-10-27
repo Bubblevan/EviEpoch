@@ -318,37 +318,46 @@ class View:
                               "ORDER BY valid_start DESC LIMIT ?", (self.ns, date, limit)).fetchall()
         return {r[0]: 1 / (i + 1) for i, r in enumerate(rows)}
 
+    def _by_ids(self, statement: str, ids):
+        """Bounded IN batches keep snapshot materialization independent of candidate count RTTs."""
+        ordered = sorted(set(ids))
+        rows = []
+        for start in range(0, len(ordered), 400):
+            block = ordered[start:start + 400]
+            placeholders = ",".join("?" for _ in block)
+            rows.extend(self.c.execute(statement.format(ids=placeholders), (self.ns, *block)).fetchall())
+        return rows
+
+    def _objects(self, ids):
+        return self._by_ids("SELECT kind,payload FROM ee_objects WHERE ns=? AND active>0 AND id IN ({ids})", ids)
+
+    def _edges_for(self, ids, limit=None):
+        rows = {}
+        for field in ("origin", "target"):
+            for payload, in self._by_ids("SELECT payload FROM ee_edges WHERE ns=? AND " + field + " IN ({ids})", ids):
+                edge = Edge(**json.loads(payload))
+                rows[edge.id] = edge
+        result = [rows[key] for key in sorted(rows)]
+        return result[:limit] if limit is not None else result
+
     def snapshot(self, ids: set[str] | None = None, expand: int = 0) -> Snapshot:
         if ids is None:
-            rows = self.c.execute("SELECT kind,payload FROM ee_objects WHERE ns=? AND active>0",
-                                  (self.ns,)).fetchall()
+            rows = self.c.execute("SELECT kind,payload FROM ee_objects WHERE ns=? AND active>0", (self.ns,)).fetchall()
         else:
-            ids = set(ids)
+            ids, frontier = set(ids), set(ids)
             for _ in range(expand):
-                frontier = set()
-                for oid in sorted(ids)[:self.repo.config.graph_budget]:
-                    for origin, target in self.c.execute(
-                        "SELECT origin,target FROM ee_edges WHERE ns=? AND (origin=? OR target=?) LIMIT ?",
-                        (self.ns, oid, oid, self.repo.config.graph_budget)).fetchall():
-                        frontier.update((origin, target))
-                ids.update(sorted(frontier)[:self.repo.config.graph_budget])
-            source_ids = set()
-            for oid in sorted(ids):
-                source_ids.update(r[0] for r in self.c.execute(
-                    "SELECT source_id FROM ee_dependencies WHERE ns=? AND object_id=?", (self.ns, oid)).fetchall())
-            ids.update(source_ids)
-            rows = []
-            for oid in sorted(ids):
-                row = self.c.execute("SELECT kind,payload FROM ee_objects WHERE ns=? AND id=? AND active>0",
-                                     (self.ns, oid)).fetchone()
-                if row:
-                    rows.append(row)
-            # Pull peer assertions anchored in the same sources, and their exact spans.
-            for sid in source_ids | {json.loads(p)["id"] for k, p in rows if k == "source"}:
-                for row in self.c.execute("SELECT o.kind,o.payload FROM ee_objects o JOIN ee_dependencies d "
-                                          "ON d.ns=o.ns AND d.object_id=o.id WHERE d.ns=? AND d.source_id=? "
-                                          "AND o.active>0", (self.ns, sid)).fetchall():
-                    rows.append(row)
+                edges = self._edges_for(frontier, self.repo.config.graph_budget)
+                frontier = {oid for edge in edges for oid in (edge.origin, edge.target)} - ids
+                ids.update(frontier)
+                if not frontier:
+                    break
+            source_ids = {row[0] for row in self._by_ids(
+                "SELECT source_id FROM ee_dependencies WHERE ns=? AND object_id IN ({ids})", ids)}
+            rows = self._objects(ids | source_ids)
+            source_ids.update(json.loads(payload)["id"] for kind, payload in rows if kind == "source")
+            rows.extend(self._by_ids(
+                "SELECT o.kind,o.payload FROM ee_objects o JOIN ee_dependencies d "
+                "ON d.ns=o.ns AND d.object_id=o.id WHERE d.ns=? AND o.active>0 AND d.source_id IN ({ids})", source_ids))
         sources, nodes, spans = {}, {}, {}
         for kind, payload in rows:
             data = json.loads(payload)
@@ -358,29 +367,22 @@ class View:
                 spans[data["id"]] = Span(**data)
             else:
                 nodes[data["id"]] = node_from_dict(data)
-        # Fetch dependencies of navigation peers as well. No hidden source can pass assembly.
-        for sid in {s for n in nodes.values() for s in n.source_ids} - sources.keys():
-            row = self.c.execute("SELECT payload FROM ee_objects WHERE ns=? AND id=? AND kind='source' AND active>0",
-                                 (self.ns, sid)).fetchone()
-            if row:
-                sources[sid] = Source(**json.loads(row[0]))
-        nodes = {k: n for k, n in nodes.items() if set(n.source_ids) <= sources.keys()}
-        edges = {}
-        for oid in nodes:
-            for payload, in self.c.execute("SELECT payload FROM ee_edges WHERE ns=? AND (origin=? OR target=?)",
-                                           (self.ns, oid, oid)).fetchall():
-                edge = Edge(**json.loads(payload))
-                if edge.origin in nodes and edge.target in nodes:
-                    # The statement establishing a relationship can be a third source, separate
-                    # from both endpoint assertions. A valid proof needs that statement too.
-                    for sid in set(edge.source_ids) - sources.keys():
-                        source_row = self.c.execute("SELECT payload FROM ee_objects WHERE ns=? AND id=? "
-                                                    "AND kind='source' AND active>0", (self.ns, sid)).fetchone()
-                        if source_row:
-                            sources[sid] = Source(**json.loads(source_row[0]))
-                if edge.origin in nodes and edge.target in nodes and set(edge.source_ids) <= sources.keys():
-                    edges[edge.id] = edge
-        return Snapshot(self.generation, self.policy_generation, sources, nodes, list(edges.values()), spans)
+        missing = {sid for node in nodes.values() for sid in node.source_ids} - sources.keys()
+        for kind, payload in self._objects(missing):
+            if kind == "source":
+                source = Source(**json.loads(payload))
+                sources[source.id] = source
+        nodes = {oid: node for oid, node in nodes.items() if set(node.source_ids) <= sources.keys()}
+        candidate_edges = [edge for edge in self._edges_for(nodes) if edge.origin in nodes and edge.target in nodes]
+        missing = {sid for edge in candidate_edges for sid in edge.source_ids} - sources.keys()
+        for kind, payload in self._objects(missing):
+            if kind == "source":
+                source = Source(**json.loads(payload))
+                sources[source.id] = source
+        edges = [edge for edge in candidate_edges if set(edge.source_ids) <= sources.keys()]
+        spans = {oid: span for oid, span in spans.items() if span.source_id in sources}
+        return Snapshot(self.generation, self.policy_generation, sources, nodes, edges, spans)
+
 
 
 def schema(pg: bool, dimensions: int) -> str:

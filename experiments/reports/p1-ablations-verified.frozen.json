@@ -1,0 +1,919 @@
+{
+  "schema": 1,
+  "scope": "self-authored-public-controls-only",
+  "records": {
+    "extract:8c43618b311aef44a759e0d0adebcf1f86376398a7e4bfe2362d7f3e03383511": {
+      "output": {
+        "nodes": [
+          {
+            "key": "kyoto_2022",
+            "message": 0,
+            "quote": "In January 2022 I lived in Kyoto.",
+            "kind": "fact",
+            "subject": "user",
+            "predicate": "residence",
+            "value": "Kyoto",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": "2022-01",
+            "event_date": null,
+            "time_quote": "January 2022"
+          }
+        ],
+        "relations": [],
+        "governance": []
+      }
+    },
+    "extract:4f23b3d59e2701dbf3b3c95467b0c4e1fcf97592f8f6784fd6f5c5ab9f604d83": {
+      "output": {
+        "nodes": [
+          {
+            "key": "residence_osaka_2024",
+            "message": 0,
+            "quote": "In June 2024 I moved to Osaka.",
+            "kind": "event",
+            "subject": "user",
+            "predicate": "residence_move",
+            "value": "Osaka",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "change",
+            "valid_date": "2024-06",
+            "event_date": "2024-06",
+            "time_quote": "June 2024"
+          },
+          {
+            "key": "current_home_osaka",
+            "message": 0,
+            "quote": "My current home is Osaka.",
+            "kind": "fact",
+            "subject": "user",
+            "predicate": "residence",
+            "value": "Osaka",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "change",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          }
+        ],
+        "relations": [
+          {
+            "from": "residence_osaka_2024",
+            "to": "current_home_osaka",
+            "kind": "CAUSE_STATED",
+            "message": 0,
+            "quote": "In June 2024 I moved to Osaka. My current home is Osaka."
+          },
+          {
+            "from": "current_home_osaka",
+            "to": "d60081de400a6c1e8a7dc2db422cb6fb",
+            "kind": "CORRECTS",
+            "message": 0,
+            "quote": "My current home is Osaka."
+          }
+        ],
+        "governance": []
+      }
+    },
+    "extract:b76da8f81212d4037cd2cd8c5134bb8eef8f37e10ef22d2294c7de92f43ef32a": {
+      "output": {
+        "nodes": [
+          {
+            "key": "tokyo_plan_2028",
+            "message": 0,
+            "quote": "I plan to move to Tokyo in 2028.",
+            "kind": "event",
+            "subject": "user",
+            "predicate": "residence_move",
+            "value": "Tokyo",
+            "scope": "general",
+            "modality": "planned",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": "2028",
+            "time_quote": "in 2028"
+          },
+          {
+            "key": "future_plan_only",
+            "message": 0,
+            "quote": "This is only a future plan.",
+            "kind": "fact",
+            "subject": "user",
+            "predicate": "residence_move_status",
+            "value": "future plan only",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          }
+        ],
+        "relations": [],
+        "governance": []
+      }
+    },
+    "query-plan:b7e12a4f753b47ef1f14e6ee9d2c7546b7b03d2e76edcb1d9a609c7847241ab3": {
+      "output": {
+        "intents": [
+          "current"
+        ],
+        "entities": [],
+        "attributes": [
+          "residence"
+        ],
+        "as_of": null,
+        "required_relations": [],
+        "obligations": [
+          {
+            "id": "o1",
+            "query": "当前居住地信息",
+            "weight": 1.0
+          }
+        ]
+      }
+    },
+    "query-plan:797e14fa0e9e580d198bfcd1037a7a185fea48a3b1afd1fd951fd147d761cb41": {
+      "output": {
+        "intents": [
+          "as_of"
+        ],
+        "entities": [],
+        "attributes": [
+          "residence"
+        ],
+        "as_of": "2022-01",
+        "required_relations": [],
+        "obligations": [
+          {
+            "id": "o1",
+            "query": "居住地信息（2022年1月）",
+            "weight": 1.0
+          }
+        ]
+      }
+    },
+    "extract:0afa9ab32a2213c66df79f1666fa501413b8e719e47864d14463f5c0e1b555bb": {
+      "output": {
+        "nodes": [
+          {
+            "key": "arbor_start",
+            "message": 0,
+            "quote": "I started at Arbor Labs on 12 March 2023.",
+            "kind": "fact",
+            "subject": "user",
+            "predicate": "employment_start_date",
+            "value": "2023-03-12",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": "2023-03-12",
+            "event_date": "2023-03-12",
+            "time_quote": "12 March 2023"
+          },
+          {
+            "key": "arbor_employer",
+            "message": 0,
+            "quote": "I started at Arbor Labs on 12 March 2023.",
+            "kind": "fact",
+            "subject": "user",
+            "predicate": "employer",
+            "value": "Arbor Labs",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          }
+        ],
+        "relations": [],
+        "governance": []
+      }
+    },
+    "extract:6ffba33e3a8f79974e9236e8ad200acfc3ced6d1d5445d57f143f2d9a9d4d4e5": {
+      "output": {
+        "nodes": [
+          {
+            "key": "move_bristol",
+            "message": 0,
+            "quote": "I moved to Bristol on 9 September 2023.",
+            "kind": "event",
+            "subject": "user",
+            "predicate": "residence_move",
+            "value": "Bristol",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": "2023-09-09",
+            "event_date": "2023-09-09",
+            "time_quote": "9 September 2023"
+          }
+        ],
+        "relations": [],
+        "governance": []
+      }
+    },
+    "query-plan:46ee9de2a5199bef03aebcf542e99c0c8a14c1eeebda952063f7ad90e581a63e": {
+      "output": {
+        "intents": [
+          "comparison",
+          "history"
+        ],
+        "entities": [
+          "Arbor Labs",
+          "Bristol"
+        ],
+        "attributes": [
+          "start date at Arbor Labs",
+          "move date to Bristol"
+        ],
+        "as_of": null,
+        "required_relations": [
+          "BEFORE"
+        ],
+        "obligations": [
+          {
+            "id": "o1",
+            "query": "When did I start at Arbor Labs?",
+            "weight": 1.0
+          },
+          {
+            "id": "o2",
+            "query": "When did I move to Bristol?",
+            "weight": 1.0
+          }
+        ]
+      }
+    },
+    "extract:db5f534d8fd8fdcae9a6aad86402de1ea4120e70735abe1491200d0d5195c71f": {
+      "output": {
+        "nodes": [
+          {
+            "key": "n1",
+            "message": 0,
+            "quote": "The certificate rotation disabled our legacy trust anchor.",
+            "kind": "fact",
+            "subject": "user",
+            "predicate": "legacy_trust_anchor_status",
+            "value": "disabled by certificate rotation",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          }
+        ],
+        "relations": [],
+        "governance": []
+      }
+    },
+    "extract:484a84ccc69c99be49776d958b8754deb14d5dceaef6eb52b957f396f962f853": {
+      "output": {
+        "nodes": [
+          {
+            "key": "invoice_fail_cause",
+            "message": 0,
+            "quote": "Invoice delivery failed because the legacy trust anchor was disabled by the certificate rotation.",
+            "kind": "event",
+            "subject": "user",
+            "predicate": "invoice_delivery_status",
+            "value": "failed",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          }
+        ],
+        "relations": [
+          {
+            "from": "8f20962848f5287a3bd4eed19160cc4f",
+            "to": "invoice_fail_cause",
+            "kind": "CAUSE_STATED",
+            "message": 0,
+            "quote": "Invoice delivery failed because the legacy trust anchor was disabled by the certificate rotation."
+          }
+        ],
+        "governance": []
+      }
+    },
+    "query-plan:21041885066127c1b64cd9a0b44dbb0a5d9dbdbc885ee11a6c16b38317f7b795": {
+      "output": {
+        "intents": [
+          "why",
+          "history"
+        ],
+        "entities": [
+          "invoice delivery",
+          "invoice delivery failure"
+        ],
+        "attributes": [
+          "failure cause",
+          "earlier decision"
+        ],
+        "as_of": null,
+        "required_relations": [
+          "CAUSE_STATED",
+          "RESULT_OF"
+        ],
+        "obligations": [
+          {
+            "id": "o1",
+            "query": "invoice delivery failed",
+            "weight": 1.0
+          },
+          {
+            "id": "o2",
+            "query": "cause of the invoice delivery failure",
+            "weight": 1.0
+          },
+          {
+            "id": "o3",
+            "query": "earlier decision that led to the invoice delivery failure",
+            "weight": 1.0
+          }
+        ]
+      }
+    },
+    "extract:acc85174f2c2d0331fab2fae06cabed67fe9ac75e1579df0c724d95f222ceca2": {
+      "output": {
+        "nodes": [
+          {
+            "key": "release_policy_approval",
+            "message": 0,
+            "quote": "deployment requires an approval from the on-call lead",
+            "kind": "rule",
+            "subject": "release policy",
+            "predicate": "deployment_approval_requirement",
+            "value": "approval from the on-call lead",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          }
+        ],
+        "relations": [],
+        "governance": []
+      }
+    },
+    "extract:3b394eab352107febada5ae74129d89f2076e6073a03af2cf03bd70892b065c3": {
+      "output": {
+        "nodes": [
+          {
+            "key": "exc_emergency_deploy",
+            "message": 0,
+            "quote": "an active emergency incident allows deployment without prior approval, followed by an audit",
+            "kind": "rule",
+            "subject": "release policy",
+            "predicate": "deployment_approval_exception",
+            "value": "active emergency incident permits deployment without prior approval, followed by an audit",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          }
+        ],
+        "relations": [
+          {
+            "from": "exc_emergency_deploy",
+            "to": "a053eed193cdd9e7d03937f32e2b3005",
+            "kind": "EXCEPT_IF",
+            "message": 0,
+            "quote": "Exception to the deployment approval policy: an active emergency incident allows deployment without prior approval, followed by an audit."
+          }
+        ],
+        "governance": []
+      }
+    },
+    "extract:fb659ff7f79612059b92630fe7f85c006d37e3966a34b62582d5f533670321c4": {
+      "output": {
+        "nodes": [
+          {
+            "key": "deploy_emergency_incident",
+            "message": 0,
+            "quote": "The current deployment is responding to an active emergency incident.",
+            "kind": "fact",
+            "subject": "current deployment",
+            "predicate": "deployment_context",
+            "value": "responding to an active emergency incident",
+            "scope": "current deployment",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          },
+          {
+            "key": "no_prior_approval",
+            "message": 0,
+            "quote": "No prior approval has been received.",
+            "kind": "fact",
+            "subject": "current deployment",
+            "predicate": "prior_approval_received",
+            "value": "no",
+            "scope": "current deployment",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          }
+        ],
+        "relations": [
+          {
+            "from": "deploy_emergency_incident",
+            "to": "892340d687be2c5810b1248be08e48d8",
+            "kind": "SUPPORTS",
+            "message": 0,
+            "quote": "The current deployment is responding to an active emergency incident."
+          },
+          {
+            "from": "no_prior_approval",
+            "to": "a053eed193cdd9e7d03937f32e2b3005",
+            "kind": "CONTRADICTS",
+            "message": 0,
+            "quote": "No prior approval has been received."
+          }
+        ],
+        "governance": []
+      }
+    },
+    "query-plan:5f0fac20ef75d0d22a04fdd1bd188eb4c23ea05846d90e3fc62b6111f3dc4720": {
+      "output": {
+        "intents": [
+          "procedure",
+          "current"
+        ],
+        "entities": [
+          "release policy",
+          "current deployment",
+          "prior approval"
+        ],
+        "attributes": [
+          "approval requirement",
+          "post-deployment requirement"
+        ],
+        "as_of": null,
+        "required_relations": [
+          "REQUIRES",
+          "EXCEPT_IF"
+        ],
+        "obligations": [
+          {
+            "id": "o1",
+            "query": "release policy rule on whether deployment may proceed without prior approval",
+            "weight": 1.0
+          },
+          {
+            "id": "o2",
+            "query": "release policy requirement for what must be done after deployment",
+            "weight": 1.0
+          },
+          {
+            "id": "o3",
+            "query": "release policy exceptions or conditions allowing deployment without prior approval",
+            "weight": 1.0
+          }
+        ]
+      }
+    },
+    "extract:1966246a9b23b755ab838fa162a9014ec55ecaa21f33cf5872ebf0dbd0a65d6f": {
+      "output": {
+        "nodes": [
+          {
+            "key": "peanut_allergy",
+            "message": 0,
+            "quote": "我对花生严重过敏，任何场景都不能吃花生。",
+            "kind": "fact",
+            "subject": "user",
+            "predicate": "allergy",
+            "value": "花生严重过敏",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          },
+          {
+            "key": "no_peanut_rule",
+            "message": 0,
+            "quote": "任何场景都不能吃花生",
+            "kind": "rule",
+            "subject": "user",
+            "predicate": "dietary_restriction",
+            "value": "任何场景都不能吃花生",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          }
+        ],
+        "relations": [
+          {
+            "from": "peanut_allergy",
+            "to": "no_peanut_rule",
+            "kind": "CAUSE_STATED",
+            "message": 0,
+            "quote": "我对花生严重过敏，任何场景都不能吃花生。"
+          }
+        ],
+        "governance": []
+      }
+    },
+    "extract:ff50757a2225cf69708622f755e0daa87b9a4f3d83199ea3198aa995b3b54d0a": {
+      "output": {
+        "nodes": [
+          {
+            "key": "pref_veg_weekday_lunch",
+            "message": 0,
+            "quote": "工作日午餐我偏好素食",
+            "kind": "preference",
+            "subject": "user",
+            "predicate": "meal_preference",
+            "value": "素食",
+            "scope": "工作日午餐",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          },
+          {
+            "key": "pref_weekend_no_limit",
+            "message": 0,
+            "quote": "周末没有这个偏好限制",
+            "kind": "preference",
+            "subject": "user",
+            "predicate": "meal_preference",
+            "value": "无素食偏好限制",
+            "scope": "周末",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          }
+        ],
+        "relations": [
+          {
+            "from": "pref_weekend_no_limit",
+            "to": "pref_veg_weekday_lunch",
+            "kind": "EXCEPT_IF",
+            "message": 0,
+            "quote": "周末没有这个偏好限制"
+          }
+        ],
+        "governance": []
+      }
+    },
+    "query-plan:75c6a6eab204a496cf5f5450994134f445d50104ac1964072930a00b8754efcb": {
+      "output": {
+        "intents": [
+          "list",
+          "procedure"
+        ],
+        "entities": [
+          "工作日午餐",
+          "饮食要求"
+        ],
+        "attributes": [
+          "饮食限制",
+          "饮食偏好"
+        ],
+        "as_of": null,
+        "required_relations": [],
+        "obligations": [
+          {
+            "id": "o1",
+            "query": "用户声明的饮食限制或禁忌",
+            "weight": 1.0
+          },
+          {
+            "id": "o2",
+            "query": "用户声明的饮食偏好或必须遵守的饮食规则",
+            "weight": 1.0
+          },
+          {
+            "id": "o3",
+            "query": "安排工作日午餐时需满足的条件或例外情况",
+            "weight": 1.0
+          }
+        ]
+      }
+    },
+    "extract:1a973d926787496fb5c75180fba3e66c3644e4ff3f240d62847d66da745e6ad8": {
+      "output": {
+        "nodes": [
+          {
+            "key": "addr_cedar",
+            "message": 0,
+            "quote": "My old street address was 17 Cedar Lane.",
+            "kind": "fact",
+            "subject": "user",
+            "predicate": "street_address",
+            "value": "17 Cedar Lane",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          }
+        ],
+        "relations": [],
+        "governance": []
+      }
+    },
+    "extract:9be2f635c1281b3118be7744c553b31c4368db62207877e52ed87e5d4a7e31eb": {
+      "output": {
+        "nodes": [
+          {
+            "key": "hobby_pottery",
+            "message": 0,
+            "quote": "My favourite hobby is pottery.",
+            "kind": "preference",
+            "subject": "user",
+            "predicate": "favourite_hobby",
+            "value": "pottery",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          }
+        ],
+        "relations": [],
+        "governance": []
+      }
+    },
+    "extract:517e85d58f3c785f50c39d56080130bb3c1fdc139c42f5c7ec43c034c173d6c9": {
+      "output": {
+        "nodes": [],
+        "relations": [],
+        "governance": [
+          {
+            "message": 0,
+            "quote": "Please permanently erase my old street address, including 17 Cedar Lane, and all derived memories of that address.",
+            "action": "erase",
+            "target_ids": [
+              "cad92af4b5d0dac5ad75ac2355fb84b5"
+            ],
+            "subject": "user",
+            "predicate": "street_address",
+            "scope": ""
+          }
+        ]
+      }
+    },
+    "query-plan:5ca44f94605abbf611be423362b33d89da3e5cd6c3deb64f69eea19f38d697b1": {
+      "output": {
+        "intents": [
+          "fact"
+        ],
+        "entities": [],
+        "attributes": [
+          "street address"
+        ],
+        "as_of": null,
+        "required_relations": [],
+        "obligations": [
+          {
+            "id": "o1",
+            "query": "用户以前的街道地址",
+            "weight": 1.0
+          }
+        ]
+      }
+    },
+    "query-plan:72b50a9a9df354b83dad12cffcc9e0b82892753cf4b8a3c4c254a6b2e5d3afc5": {
+      "output": {
+        "intents": [
+          "fact"
+        ],
+        "entities": [],
+        "attributes": [
+          "favourite hobby"
+        ],
+        "as_of": null,
+        "required_relations": [],
+        "obligations": [
+          {
+            "id": "o1",
+            "query": "用户最喜欢的爱好是什么",
+            "weight": 1.0
+          }
+        ]
+      }
+    },
+    "extract:9dd17cb23065988828f0a79374af3a834673b2fef3e215543489377be75312a8": {
+      "output": {
+        "nodes": [
+          {
+            "key": "n1",
+            "message": 0,
+            "quote": "I finished reading The Left Hand of Darkness.",
+            "kind": "event",
+            "subject": "user",
+            "predicate": "finished_reading",
+            "value": "The Left Hand of Darkness",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          }
+        ],
+        "relations": [],
+        "governance": []
+      }
+    },
+    "query-plan:7b317d1b8abc692cffbb92357fda82061d96f04d7a31a5e217ee84fe58b07b5d": {
+      "output": {
+        "intents": [
+          "fact"
+        ],
+        "entities": [],
+        "attributes": [
+          "bank account number"
+        ],
+        "as_of": null,
+        "required_relations": [],
+        "obligations": [
+          {
+            "id": "o1",
+            "query": "用户本人的银行账号信息",
+            "weight": 1.0
+          }
+        ]
+      }
+    },
+    "extract:ce40f12bc71fd273758023960255aa5fb7a3d3cdce74379ece4163fbfdaa919f": {
+      "output": {
+        "nodes": [
+          {
+            "key": "lesson_strategy_a_staging",
+            "message": 0,
+            "quote": "My current lesson is that strategy A always fails in staging.",
+            "kind": "reflection",
+            "subject": "user",
+            "predicate": "lesson",
+            "value": "strategy A always fails in staging",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          }
+        ],
+        "relations": [],
+        "governance": []
+      }
+    },
+    "extract:fd6f15f1026ac84457820e5c8a5dd7aaaeb094df86342c02e8ec0f815505f670": {
+      "output": {
+        "nodes": [
+          {
+            "key": "n1",
+            "message": 0,
+            "quote": "Strategy A succeeded in staging today",
+            "kind": "event",
+            "subject": "user",
+            "predicate": "strategy A outcome in staging",
+            "value": "succeeded",
+            "scope": "staging",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "assertion",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": "today"
+          },
+          {
+            "key": "n2",
+            "message": 0,
+            "quote": "my earlier claim that it always fails was too strong",
+            "kind": "reflection",
+            "subject": "user",
+            "predicate": "lesson",
+            "value": "earlier claim that strategy A always fails in staging was too strong",
+            "scope": "general",
+            "modality": "asserted",
+            "cardinality": "single",
+            "change": "correction",
+            "valid_date": null,
+            "event_date": null,
+            "time_quote": ""
+          }
+        ],
+        "relations": [
+          {
+            "from": "n1",
+            "to": "42ef66f84106f02c69e276686f61350f",
+            "kind": "CONTRADICTS",
+            "message": 0,
+            "quote": "Strategy A succeeded in staging today. This counterexample means my earlier claim that it always fails was too strong."
+          },
+          {
+            "from": "n2",
+            "to": "42ef66f84106f02c69e276686f61350f",
+            "kind": "CORRECTS",
+            "message": 0,
+            "quote": "my earlier claim that it always fails was too strong"
+          }
+        ],
+        "governance": []
+      }
+    },
+    "temporal-review:7e8f96abc72b25202494b6c79e3abc47d62729440fd693a583fa1ace793b4221": {
+      "output": {
+        "decisions": [
+          {
+            "id": "88c6c729268af0a2daf7eb534882ed8e",
+            "classification": "correction",
+            "target_ids": [
+              "42ef66f84106f02c69e276686f61350f"
+            ]
+          }
+        ]
+      }
+    },
+    "query-plan:5f517d83e2b66b5788c27b55070981040a09688fab718634b21a3bffe77f3557": {
+      "output": {
+        "intents": [
+          "why",
+          "fact"
+        ],
+        "entities": [
+          "strategy A",
+          "staging"
+        ],
+        "attributes": [
+          "failure behavior",
+          "environment"
+        ],
+        "as_of": null,
+        "required_relations": [
+          "SUPPORTS",
+          "CONTRADICTS"
+        ],
+        "obligations": [
+          {
+            "id": "o1",
+            "query": "Evidence about whether strategy A fails in staging",
+            "weight": 1.0
+          },
+          {
+            "id": "o2",
+            "query": "Evidence about whether strategy A's failure in staging is universal or conditional",
+            "weight": 1.0
+          }
+        ]
+      }
+    }
+  },
+  "artifact_hash": "181f47be04fbce28bfd1201202dbde43edcf9b14a66a291bee8f0cd69364e7f7",
+  "models": {
+    "llm": "deepseek-flash",
+    "embedding": "text-embedding-v4",
+    "dimensions": 1024
+  },
+  "dataset_hash": "76614de0f750f8c9a8734d08091f0c70ce4e259ffa797807e6198c0c5c0100ed"
+}

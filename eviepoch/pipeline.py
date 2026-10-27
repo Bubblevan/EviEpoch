@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from functools import partial
@@ -13,8 +14,9 @@ from .config import Settings
 from .domain import IngestBusy, InvalidExtraction, Obligation, QueryPlan, Source, digest, namespace, stable_id, timestamp
 from .ingest.extraction import parse_plan, validate_extraction
 from .manage import reconcile
+from .manage.temporal import verify_changes
 from .domain.requests import AddRequest, SearchRequest
-from .providers import Providers
+from .providers import Providers, ProviderUnavailable, StructuredOutputTruncated
 from .storage import Repository
 from .retrieval import retrieve
 from .observability.metrics import Metrics, measured
@@ -51,26 +53,50 @@ def _source_batches(sources: list[Source], max_chars: int):
             if group and size + len(fragment) > max_chars:
                 batches.append(group)
                 group, size = [], 0
-            group.append((source, replace(source, content=fragment)))
+            part = replace(source, content=fragment, locator={**source.locator,
+                           "extraction_char_start": start, "extraction_char_end": start + len(fragment)})
+            group.append((source, part))
             size += len(fragment)
     if group:
         batches.append(group)
     return batches
 
 
-def _extract_batch(providers, batch, known, max_facts):
+def _extract_batch(providers, batch, known, max_facts, consume=lambda: None):
     """Extract and validate one batch, repairing invalid output once when supported."""
     parts = [part for _source, part in batch]
     originals = [source for source, _part in batch]
+    windows = [(p.locator.get("extraction_char_start", 0), p.locator.get("extraction_char_end", len(s.content)))
+               for s, p in batch]
+    consume()
     data = providers.extract(parts, known)
     try:
-        return validate_extraction(data, originals, known, max_facts)
+        return validate_extraction(data, originals, known, max_facts, windows)
     except InvalidExtraction as exc:
         repair = getattr(providers, "repair_extraction", None)
         if repair is None:
             raise
+        consume()
         repaired = repair(parts, known, exc)
-        return validate_extraction(repaired, originals, known, max_facts)
+        return validate_extraction(repaired, originals, known, max_facts, windows)
+
+
+def _split_batch(batch):
+    if len(batch) > 1:
+        middle = len(batch) // 2
+        return batch[:middle], batch[middle:]
+    source, part = batch[0]
+    if len(part.content) < 512:
+        return None
+    middle = len(part.content) // 2
+    overlap = min(128, middle // 4)
+    start = part.locator.get("extraction_char_start", 0)
+    result = []
+    for left, right in ((0, middle + overlap), (middle - overlap, len(part.content))):
+        fragment = replace(part, content=part.content[left:right], locator={**part.locator,
+                           "extraction_char_start": start + left, "extraction_char_end": start + right})
+        result.append([(source, fragment)])
+    return result
 
 
 
@@ -122,15 +148,46 @@ class MemoryPipeline:
         if self.config.profile != "full":
             return spans, nodes, edges, policies
 
-        for batch in _source_batches(sources, self.config.extraction_chars):
-            result = _extract_batch(self.providers, batch, known, self.config.max_facts)
+        deadline, calls = time.monotonic() + self.config.extraction_deadline_seconds, 0
+
+        def consume():
+            nonlocal calls
+            if calls >= self.config.extraction_max_calls or time.monotonic() >= deadline:
+                raise ProviderUnavailable("bounded extraction budget exhausted")
+            calls += 1
+
+        def ingest(batch, depth=0):
+            try:
+                result = _extract_batch(self.providers, batch, known, self.config.max_facts, consume)
+            except (InvalidExtraction, StructuredOutputTruncated):
+                split = _split_batch(batch) if depth < self.config.extraction_split_depth else None
+                if split is None:
+                    raise
+                for child in split:
+                    ingest(child, depth + 1)
+                return
+            if any(n.change in {"correction", "retraction"} for n in result[1]) and hasattr(self.providers, "verify_changes"):
+                consume()
+            checked_nodes, checked_edges = verify_changes(result[1], result[2], [s for s, _part in batch], known, self.providers)
+            result = (result[0], checked_nodes, checked_edges, result[3])
             spans.extend(result[0])
             nodes.extend(result[1])
             edges.extend(result[2])
             policies.extend(result[3])
             known.nodes.update({node.id: node for node in result[1]})
             known.sources.update({source.id: source for source, _part in batch})
-        return spans, nodes, edges, policies
+
+        for batch in _source_batches(sources, self.config.extraction_chars):
+            ingest(batch)
+        # Overlapping windows can find the same supported assertion or governance operation twice.
+        merged_policies = {}
+        for policy in policies:
+            key = (policy.action, policy.instruction_source_id, policy.subject, policy.predicate, policy.scope)
+            if key in merged_policies:
+                policy.source_ids = sorted(set(policy.source_ids + merged_policies[key].source_ids))
+            merged_policies[key] = policy
+        return (list({s.id: s for s in spans}.values()), list({n.id: n for n in nodes}.values()),
+                list({e.id: e for e in edges}.values()), list(merged_policies.values()))
 
     @measured("add")
     def add(self, request: AddRequest) -> dict:

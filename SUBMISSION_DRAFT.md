@@ -8,7 +8,7 @@
 - **Search API URL:** https://bubblevan.bbroot.com/v1/memories/search
 - **Authentication:** `Authorization: Token <Memory System Key>`
 - **Public repository:** https://github.com/Bubblevan/EviEpoch
-- **Applicant:** Bao Bowen (包博文), individual
+- **Applicant:** Bao Bowen, individual
 
 ## Submission notes / run instructions
 

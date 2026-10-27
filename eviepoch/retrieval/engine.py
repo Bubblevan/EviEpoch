@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 import numpy as np
 
@@ -10,6 +10,8 @@ from . import tokens
 from ..domain import InvalidExtraction, Obligation, QueryPlan, Snapshot
 from .lexical import terms
 from .fusion import merge
+from ..providers import ProviderUnavailable
+from ..manage.temporal import project_state_edges
 
 RETRIEVAL_VERSION = "rrf-proof-beam-v1"
 
@@ -118,14 +120,19 @@ def proofs(plan: QueryPlan, snap: Snapshot, scores: dict[str, float], config) ->
 
 def bind_proofs(plan, snap, query, providers, config):
     data = providers.bind_obligations(query, plan, snap)
+    if not isinstance(data, dict):
+        raise InvalidExtraction("proof binding must be an object")
     rows = data.get("obligations")
     if not isinstance(rows, list):
         raise InvalidExtraction("proof binding requires an obligations array")
     expected = {o.id: o for o in plan.obligations}
     found = set()
+    staged = {}
     for row in rows:
+        if not isinstance(row, dict):
+            raise InvalidExtraction("bound obligation must be an object")
         oid, groups = row.get("id"), row.get("alternatives")
-        if oid not in expected or oid in found or not isinstance(groups, list) or len(groups) > 8:
+        if not isinstance(oid, str) or oid not in expected or oid in found or not isinstance(groups, list) or len(groups) > 8:
             raise InvalidExtraction("invalid bound obligation")
         found.add(oid)
         alternatives = []
@@ -134,6 +141,8 @@ def bind_proofs(plan, snap, query, providers, config):
                 raise InvalidExtraction("invalid AND evidence set")
             refs = set()
             for key in group:
+                if not isinstance(key, str):
+                    raise InvalidExtraction("evidence IDs must be strings")
                 if key in snap.nodes:
                     refs.update(_closure(key, plan, snap, config.graph_depth) if config.relations_enabled
                                 else snap.nodes[key].source_ids)
@@ -143,10 +152,55 @@ def bind_proofs(plan, snap, query, providers, config):
                     raise InvalidExtraction("proof binding invented an evidence ID")
             if refs <= snap.sources.keys():
                 alternatives.append(sorted(refs))
-        expected[oid].alternatives = alternatives
+        staged[oid] = alternatives
     if found != expected.keys():
         raise InvalidExtraction("proof binding omitted an obligation")
+    for oid, alternatives in staged.items():
+        expected[oid].alternatives = alternatives
     return plan
+
+
+def _fallback_sources(snap, plan):
+    """Only disclose live snapshot sources; exclude clearly inapplicable time/modal states."""
+    result = {}
+    for sid, source in snap.sources.items():
+        nodes = [n for n in snap.nodes.values() if sid in n.source_ids and n.kind != "summary"]
+        if nodes and "current" in plan.intents and all(n.modality in {"planned", "hypothetical"} for n in nodes):
+            continue
+        if nodes and plan.as_of.latest and all(n.valid_time.earliest and n.valid_time.earliest > plan.as_of.latest
+                                               for n in nodes):
+            continue
+        result[sid] = source
+    return result
+
+
+def controlled_fallback(request, plan, snap, evidence, providers, config, budget):
+    live = _fallback_sources(snap, plan)
+    if not live:
+        return [], "no_support_in_candidates"
+    audit = getattr(providers, "audit_evidence", None)
+    if audit is None:
+        raise ProviderUnavailable("proof selection failed and no independent evidence audit is available")
+    # Audit the actual evidence unit that can be returned. Approval of a large source
+    # must not be reused as proof that an arbitrary short span supports the question.
+    audit_units = {eid: replace(live[e.source_id], id=eid, content=e.content)
+                   for eid, e in evidence.items() if e.source_id in live}
+    if not audit_units:
+        return [], "no_support_in_candidates"
+    result = audit(request.query, plan, audit_units)
+    if not isinstance(result, dict):
+        raise ProviderUnavailable("evidence audit must be an object")
+    ids, status = result.get("ids"), result.get("status")
+    if (not isinstance(ids, list) or status not in {"relevant", "insufficient"}
+            or any(not isinstance(sid, str) or sid not in audit_units for sid in ids)
+            or bool(ids) != (status == "relevant")):
+        raise ProviderUnavailable("evidence audit returned invalid or uncertain support")
+    if not ids:
+        return [], "no_support_in_candidates"
+    allowed = {eid: e for eid, e in evidence.items() if eid in ids}
+    # This is explicitly partial evidence. It does not turn an unfinished AND proof into a full proof.
+    selected = select(plan, allowed, config, request.top_k, budget, "topk")
+    return selected, "verified_fallback" if selected else "no_evidence_fits_budget"
 
 
 def _coverage(selected: frozenset[str], plan: QueryPlan) -> float:
@@ -240,6 +294,7 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
         snap.spans.update(related.spans)
         snap.edges = list({e.id: e for e in snap.edges + related.edges}.values())
     source_scores = {sid: fused.get(sid, 0.0) for sid in snap.sources}
+    snap = project_state_edges(snap)
     for node in snap.nodes.values():
         score = fused.get(node.id, 0.0)
         # Temporal state preference only adjusts query-relevant objects, never arbitrary recent facts.
@@ -260,8 +315,17 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
         for sid, score in reranked.items():
             source_scores[sid] = score
     plan = proofs(plan, snap, fused, config)
-    if config.profile == "full" and hasattr(providers, "bind_obligations"):
-        plan = bind_proofs(plan, snap, request.query, providers, config)
+    binding_status = "disabled"
+    binding_enabled = (config.profile == "full" and config.proof_binding_enabled
+                       and hasattr(providers, "bind_obligations"))
+    if binding_enabled:
+        try:
+            plan = bind_proofs(plan, snap, request.query, providers, config)
+            binding_status = "bound" if any(o.alternatives for o in plan.obligations) else "empty"
+        except (InvalidExtraction, ProviderUnavailable) as exc:
+            binding_status = "invalid" if isinstance(exc, InvalidExtraction) else "unavailable"
+            for obligation in plan.obligations:
+                obligation.alternatives = []
     # One targeted gap iteration is bounded by the declared action/candidate budget.
     missing = [o for o in plan.obligations if not o.alternatives]
     if missing and config.gap_iterations:
@@ -273,9 +337,16 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
         snap.sources.update(extra.sources)
         snap.nodes.update(extra.nodes)
         snap.edges = list({e.id: e for e in snap.edges + extra.edges}.values())
-        if config.profile == "full" and hasattr(providers, "bind_obligations"):
-            plan = bind_proofs(plan, snap, request.query, providers, config)
-        else:
+        snap = project_state_edges(snap)
+        if binding_enabled and binding_status not in {"invalid", "unavailable"}:
+            try:
+                plan = bind_proofs(plan, snap, request.query, providers, config)
+                binding_status = "bound" if any(o.alternatives for o in plan.obligations) else "empty"
+            except (InvalidExtraction, ProviderUnavailable) as exc:
+                binding_status = "invalid" if isinstance(exc, InvalidExtraction) else "unavailable"
+                for obligation in plan.obligations:
+                    obligation.alternatives = []
+        elif not binding_enabled:
             plan = proofs(plan, snap, fused, config)
     evidence = {sid: Evidence(sid, source.render(), source.asserted_at,
                              source_scores.get(sid, 0.0), sid) for sid, source in snap.sources.items()}
@@ -294,14 +365,20 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
             replacements[sid] = span.id
             evidence.pop(sid)
             evidence[span.id] = Evidence(span.id, f"{stamp}[{source.role}] {span.quote}", source.asserted_at, e.score, sid)
-    if replacements:
-        for o in plan.obligations:
-            o.alternatives = [[replacements.get(s, s) for s in group] for group in o.alternatives]
+    # A source-level AND proof is not automatically satisfied by one replacement span.
+    # Unaffordable full-source groups remain missing; audited spans are partial fallback evidence.
+    recorder = getattr(providers, "record_selection", None)
+    if recorder is not None:
+        recorder(request.query, plan, evidence, token_budget, config)
     selected = select(plan, evidence, config, request.top_k, token_budget, config.selector)
+    selection_status = "proof_selected" if selected else "no_evidence_fits_budget"
+    if not selected and binding_enabled and token_budget > 0 and request.top_k > 0 and config.char_budget > 0:
+        selected, selection_status = controlled_fallback(request, plan, snap, evidence, providers, config, token_budget)
     plan.actions.extend(["SELECT", "FINISH"])
     selected_ids = frozenset(e.id for e in selected)
     trace = {"generation": view.generation, "policy_generation": view.policy_generation,
              "plan": asdict(plan), "candidates": len(evidence), "selected_ids": sorted(selected_ids),
+             "binding_status": binding_status, "selection_status": selection_status,
              "covered_obligations": [o.id for o in plan.obligations if any(set(g) <= selected_ids for g in o.alternatives)],
              "missing_obligations": [o.id for o in plan.obligations if not any(set(g) <= selected_ids for g in o.alternatives)],
              "source_paths": [asdict(e) for e in snap.edges],

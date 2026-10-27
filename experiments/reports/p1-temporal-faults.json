@@ -1,0 +1,93 @@
+{
+  "scope": "12 adversarial controls with oracle extraction/synthetic embeddings; not GPT/DeepSeek accuracy",
+  "cases": 12,
+  "false_invalidation_rate": 0.0,
+  "false_suppression_rate": 0.0,
+  "historical_recovery_rate": 1.0,
+  "rows": [
+    {
+      "language": 0,
+      "injected_review": "correction",
+      "false_invalidation": false,
+      "source_suppressed": false,
+      "historical_recovered": true
+    },
+    {
+      "language": 0,
+      "injected_review": "retraction",
+      "false_invalidation": false,
+      "source_suppressed": false,
+      "historical_recovered": true
+    },
+    {
+      "language": 0,
+      "injected_review": "uncertain",
+      "false_invalidation": false,
+      "source_suppressed": false,
+      "historical_recovered": true
+    },
+    {
+      "language": 0,
+      "injected_review": "change",
+      "false_invalidation": false,
+      "source_suppressed": false,
+      "historical_recovered": true
+    },
+    {
+      "language": 1,
+      "injected_review": "correction",
+      "false_invalidation": false,
+      "source_suppressed": false,
+      "historical_recovered": true
+    },
+    {
+      "language": 1,
+      "injected_review": "retraction",
+      "false_invalidation": false,
+      "source_suppressed": false,
+      "historical_recovered": true
+    },
+    {
+      "language": 1,
+      "injected_review": "uncertain",
+      "false_invalidation": false,
+      "source_suppressed": false,
+      "historical_recovered": true
+    },
+    {
+      "language": 1,
+      "injected_review": "change",
+      "false_invalidation": false,
+      "source_suppressed": false,
+      "historical_recovered": true
+    },
+    {
+      "language": 2,
+      "injected_review": "correction",
+      "false_invalidation": false,
+      "source_suppressed": false,
+      "historical_recovered": true
+    },
+    {
+      "language": 2,
+      "injected_review": "retraction",
+      "false_invalidation": false,
+      "source_suppressed": false,
+      "historical_recovered": true
+    },
+    {
+      "language": 2,
+      "injected_review": "uncertain",
+      "false_invalidation": false,
+      "source_suppressed": false,
+      "historical_recovered": true
+    },
+    {
+      "language": 2,
+      "injected_review": "change",
+      "false_invalidation": false,
+      "source_suppressed": false,
+      "historical_recovered": true
+    }
+  ]
+}

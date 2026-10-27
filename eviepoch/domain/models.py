@@ -57,8 +57,10 @@ class TimeBounds:
 
     @classmethod
     def parse(cls, value: str | None) -> "TimeBounds":
-        if not value:
+        if value is None or value == "":
             return cls()
+        if not isinstance(value, str):
+            raise InvalidExtraction("time must be a string or null")
         if not re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", value):
             raise InvalidExtraction("time must preserve year, month or day precision")
         parts = list(map(int, value.split("-")))
@@ -105,12 +107,21 @@ class Span:
     quote: str
 
 
-def locate(source: Source, quote: str) -> Span:
-    if not isinstance(quote, str) or not quote or quote not in source.content:
+def locate(source: Source, quote: str, *, char_start=0, char_end=None, occurrence=None) -> Span:
+    if not 0 <= char_start <= (char_end if char_end is not None else len(source.content)) <= len(source.content):
+        raise InvalidExtraction("invalid extraction window")
+    window = source.content[char_start:char_end]
+    if not isinstance(quote, str) or not quote or quote not in window:
         raise InvalidExtraction("quote is absent from the authoritative source")
-    if source.content.count(quote) != 1:
+    positions, offset = [], 0
+    while (position := window.find(quote, offset)) >= 0:
+        positions.append(position)
+        offset = position + len(quote)
+    if occurrence is None and len(positions) != 1:
         raise InvalidExtraction("ambiguous quote; supply a larger unique quote")
-    start = source.content.index(quote)
+    if occurrence is not None and (type(occurrence) is not int or not 0 <= occurrence < len(positions)):
+        raise InvalidExtraction("invalid quote occurrence")
+    start = char_start + positions[0 if occurrence is None else occurrence]
     byte_start = len(source.content[:start].encode("utf-8"))
     byte_end = byte_start + len(quote.encode("utf-8"))
     return Span(stable_id(source.id, byte_start, byte_end), source.id, byte_start, byte_end,
@@ -130,6 +141,9 @@ class Node:
     modality: str = "asserted"
     cardinality: str = "multi"
     change: str = "assertion"
+    change_proposal: str = ""
+    change_verified: bool = False
+    change_targets: list[str] = field(default_factory=list)
     valid_time: TimeBounds = field(default_factory=TimeBounds)
     occurrence_time: TimeBounds = field(default_factory=TimeBounds)
     asserted_at: str | None = None

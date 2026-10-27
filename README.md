@@ -18,8 +18,6 @@ eviepoch/
   providers/        # 独立 LLM/embedding 客户端、结构化操作与调用计量
   observability/    # 无正文指标、配置/代码/prompt/upstream manifest
   baselines/        # 原始 B0 向量 runner
-  _vendor/          # 固定 commit 的 Hindsight/MemOS/Cognee 独立组件
-experiments/
   datasets/         # 自建公开控制集与清单
   reports/          # 实际运行报告；开发控制结果不是官方成绩
   evaluate.py       # 相同 provider 的证据指标、固定本地 Answer/judge、方法对照
@@ -107,9 +105,3 @@ Add 在来源、索引、状态/治理与 request ledger 同一 generation 提�
 ```
 
 manifest 不输出密钥；记录 dirty 状态、代码/prompt/schema/配置及上游 commit。镜像 digest、官方 Smoke ID、目标容量与许可核验未完成时保持未通过状态。
-
-## 上游与来源
-
-已实际迁移 Hindsight 的融合与候选类型、MemOS 的 SourceMessage locator、Cognee 的纯来源归属状态转换。具体文件、固定 commit、修改内容和完整许可见 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md)。方法设计仍以 [literature](literature/README.md) 为依据；已有多路检索/图存储/生命周期机制不宣称为原创贡献。
-
-本项目顶层主体许可证与历史代码来源仍待所有者确认；上游组件的 MIT / Apache-2.0 声明已经保留。
