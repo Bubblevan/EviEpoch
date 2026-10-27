@@ -12,7 +12,7 @@ eviepoch/
   domain/           # 来源、UTF-8 引用、时间精度、断言、关系、证据义务
   ingest/           # 结构化抽取、引用与 ID 校验
   manage/           # 支持/变化/纠正、保真巩固、反例修订
-  retrieval/        # 多路候选、Hindsight 融合、查询条件化证明集、预算内选择
+  retrieval/        # 多路候选融合、查询条件化证明集、预算内选择
   governance/       # 抑制/在线擦除、依赖闭包、Cognee 来源归属状态转换
   storage/          # PostgreSQL/pgvector、namespace RLS、SQLite 验证适配器
   providers/        # 独立 LLM/embedding 客户端、结构化操作与调用计量

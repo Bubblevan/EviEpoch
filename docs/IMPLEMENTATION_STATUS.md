@@ -27,14 +27,6 @@ Search → 查询义务与时间语义 → Dense/user-BM25/时间/关系候选 �
 | F16 | PostgreSQL/pgvector、数据库内 BM25、稀疏图、有界 admission、无正文指标、Docker | 真实 PG 集成测试与模型公开小样本；未实测目标容量/公网尾延迟/恢复，暂无 PG 连接池/HNSW/Redis/OTel 服务 |
 | F17 | 固定上游 commit、完整第三方许可、代码/prompt/config manifest、本地 fixed Answer/judge runner | 仓库尚未冻结 commit，主体 LICENSE/历史来源待确认；公网 HTTPS/官方 Smoke/Full/真实容量、自然公开与封存数据实验未完成 |
 
-## 方法与上游工程迁移
-
-- Hindsight：直接迁移 multi-arm fusion、每路 cap、RRF 与 interleave 组件；当前 Search 用 RRF 并保留每路排名以便归因。
-- MemOS：来源定位类型实际用于 Source.locator；其工作/长期/原文组织方式用于模块边界参考。没有引入其完整调度器和外部图数据库依赖。
-- Cognee：来源归属键与纯状态转换接入 Add/Manage 的同一事务，避免重复触碰旧来源制造新的归属；撤销和擦除清理该表示。
-
-完整出处和修改见 [上游披露](../THIRD_PARTY_NOTICES.md)。
-
 ## 评测状态与解释
 
 `tests/` 的确定性 provider 是抽取 oracle/合成向量，只验证合同与算法状态，不估计 LLM 实际准确率。可选择在真实 PostgreSQL 上复用整个生命周期测试集。
