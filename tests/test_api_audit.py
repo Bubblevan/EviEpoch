@@ -46,6 +46,9 @@ class PayloadAuditTests(unittest.TestCase):
                     headers = {"Authorization": "Bearer local-test-token"}
                     add = {"request_id": "audit-r1", "user_id": "u1", "session_id": "s1",
                            "messages": [{"role": "user", "content": "My address is Kyoto."}]}
+                    self.assertEqual(client.post("/add", json=add).status_code, 401)
+                    self.assertEqual(client.post("/add", json=add,
+                                                 headers={"Authorization": "Bearer wrong"}).status_code, 401)
                     self.assertEqual(client.post("/add", json=add, headers=headers).status_code, 200)
                     search = {"query": "Where do I live?", "user_id": "u1", "top_k": 5}
                     self.assertEqual(client.post("/search", json=search, headers=headers).status_code, 200)

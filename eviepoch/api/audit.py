@@ -6,6 +6,7 @@ Set EPOCH_AUDIT_DIR to enable capture.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 import os
@@ -26,18 +27,21 @@ def _iso_now() -> str:
 class PayloadAuditMiddleware:
     """Capture up to a fixed number of request/response bytes for POST /add and /search."""
 
-    def __init__(self, app, audit_dir: str = "", max_body_bytes: int = 1_048_576,
-                 max_disk_bytes: int = 2_147_483_648, retention_days: int = 30):
+    def __init__(self, app, audit_dir: str = "", auth_token: str = "",
+                 max_body_bytes: int = 1_048_576, max_disk_bytes: int = 2_147_483_648,
+                 retention_days: int = 30):
         self.app = app
         self.audit_dir = Path(audit_dir) if audit_dir else None
+        self.auth_token = auth_token
         self.max_body_bytes = max(1, int(max_body_bytes))
         self.max_disk_bytes = max(1, int(max_disk_bytes))
         self.retention_days = max(1, int(retention_days))
 
     async def __call__(self, scope, receive, send):
         path = scope.get("path", "")
-        if (self.audit_dir is None or scope.get("type") != "http"
-                or scope.get("method") != "POST" or path not in {"/add", "/search"}):
+        if (self.audit_dir is None or not self._authorized(scope)
+                or scope.get("type") != "http" or scope.get("method") != "POST"
+                or path not in {"/add", "/search"}):
             await self.app(scope, receive, send)
             return
 
@@ -85,6 +89,21 @@ class PayloadAuditMiddleware:
                 request_truncated=request_truncated,
                 response_truncated=response_truncated,
             )
+
+    def _authorized(self, scope) -> bool:
+        if not self.auth_token:
+            return False
+        expected = self.auth_token.encode("utf-8")
+        for name, raw_value in scope.get("headers", []):
+            value = raw_value.decode("latin1").strip()
+            if name.lower() == b"authorization":
+                parts = value.split(None, 1)
+                if (len(parts) == 2 and parts[0].lower() in {"bearer", "token"}
+                        and hmac.compare_digest(expected, parts[1].strip().encode("utf-8"))):
+                    return True
+            elif name.lower() == b"x-api-key" and hmac.compare_digest(expected, value.encode("utf-8")):
+                return True
+        return False
 
     async def _write(self, *, path, status, started, request_body, response_body,
                      request_truncated, response_truncated):

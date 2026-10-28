@@ -78,6 +78,7 @@ def create_app(config: Settings | None = None, memory=None) -> FastAPI:
     app.add_middleware(
         PayloadAuditMiddleware,
         audit_dir=os.getenv("EPOCH_AUDIT_DIR", ""),
+        auth_token=config.auth_token,
         max_body_bytes=_env_positive_int("EPOCH_AUDIT_MAX_BODY_BYTES", 1_048_576),
         max_disk_bytes=_env_positive_int("EPOCH_AUDIT_MAX_DISK_BYTES", 2_147_483_648),
         retention_days=_env_positive_int("EPOCH_AUDIT_RETENTION_DAYS", 30),
