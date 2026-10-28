@@ -1,5 +1,5 @@
 param(
-    [string]$ServerHost = "bubblevan.de5.net",
+    [string]$ServerHost = "47.107.141.70",
     [string]$KeyPath = "D:\下载\my_server_key.pem",
     [string]$Destination = (Join-Path $env:USERPROFILE "Downloads\EviEpoch-audit")
 )

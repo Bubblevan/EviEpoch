@@ -10,4 +10,4 @@ Export from the Windows laptop after the service has received traffic:
 .\deploy\export-audit.ps1
 ```
 
-The script downloads matching JSONL files to `Downloads\EviEpoch-audit` and leaves the server copies intact. Raw records may contain private user memories; keep the local export private and use only the dataset scope authorized by the competition announcement.
+The script connects to the already verified ECS IP by default, downloads matching JSONL files to `Downloads\EviEpoch-audit`, and leaves the server copies intact. Use `-ServerHost bubblevan.de5.net` only after that hostname has been added to your verified SSH `known_hosts`. Raw records may contain private user memories; keep the local export private and use only the dataset scope authorized by the competition announcement.
