@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hmac
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException
@@ -9,6 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..config import Settings
+from .audit import PayloadAuditMiddleware
 from ..domain import IdempotencyConflict, IngestBusy, InvalidExtraction
 from ..domain.requests import AddRequest, Message, SearchRequest
 from ..pipeline import MemoryPipeline
@@ -52,6 +54,13 @@ class AddResponse(BaseModel):
     session_id: str
 
 
+def _env_positive_int(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
 def create_app(config: Settings | None = None, memory=None) -> FastAPI:
     config = config or Settings.from_env()
     memory = memory or MemoryPipeline(config)
@@ -66,6 +75,13 @@ def create_app(config: Settings | None = None, memory=None) -> FastAPI:
             memory.close()
 
     app = FastAPI(title="EviEpoch", version="0.2.0", lifespan=lifespan)
+    app.add_middleware(
+        PayloadAuditMiddleware,
+        audit_dir=os.getenv("EPOCH_AUDIT_DIR", ""),
+        max_body_bytes=_env_positive_int("EPOCH_AUDIT_MAX_BODY_BYTES", 1_048_576),
+        max_disk_bytes=_env_positive_int("EPOCH_AUDIT_MAX_DISK_BYTES", 2_147_483_648),
+        retention_days=_env_positive_int("EPOCH_AUDIT_RETENTION_DAYS", 30),
+    )
     app.state.pipeline = memory
 
     def authorize(authorization, x_api_key):
