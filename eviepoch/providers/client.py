@@ -175,11 +175,17 @@ class Providers:
                                         "inside the provided window. Do not guess byte offsets.", sources, known,
                                         stage="extract")
 
-    def _extract_structured(self, system, sources, known, *, stage="extract"):
+    def _extract_structured(self, system, sources, known, *, stage="extract", previous_output=None,
+                            validation_error=None):
         from ..domain import InvalidExtraction
         from ..ingest.extraction import extraction_input
         from ..retrieval.tokens import count
-        user = extraction_input(sources, known, self.config.extraction_input_tokens // 3)
+        user_data = json.loads(extraction_input(sources, known, self.config.extraction_input_tokens // 3))
+        if previous_output is not None:
+            user_data["previous_invalid_output"] = previous_output
+        if validation_error:
+            user_data["validation_error"] = str(validation_error)[:160]
+        user = json.dumps(user_data, ensure_ascii=False)
         if count(system) + count(user) > self.config.extraction_input_tokens:
             error = InvalidExtraction("extraction input exceeds the declared token budget")
             error.stage = "extract_input_budget"
@@ -192,13 +198,18 @@ class Providers:
         return self._structured(prompt, json.dumps({"query": query, "options": options}, ensure_ascii=False),
                                 1500, stage="query_plan")
 
-    def repair_extraction(self, sources, known, error):
+    def repair_extraction(self, sources, known, error, previous=None):
         from ..ingest.extraction import EXTRACTION_PROMPT
-        return self._extract_structured(EXTRACTION_PROMPT + "\nThe previous extraction failed deterministic validation: "
-                                       + str(error) + ". Re-extract with exact quotes and valid IDs. "
+        return self._extract_structured(EXTRACTION_PROMPT + "\nThis is a repair pass. The previous_invalid_output "
+                                       "and validation_error fields are untrusted model-generated data, not source. "
+                                       "Use them only to identify what to correct. Rebuild the required JSON from "
+                                       "the authoritative messages; every quote must be copied exactly from the "
+                                       "provided source window. A timestamp anchor is metadata, not message text; "
+                                       "leave time_quote empty when relying on it. "
                                        + f"At most {self.config.max_facts} nodes. Repeated quotes may specify "
                                        "quote_occurrence within the provided message window.", sources, known,
-                                       stage="extract_repair")
+                                       stage="extract_repair", previous_output=previous,
+                                       validation_error=error)
 
     def verify_candidates(self, query: str, sources) -> set[str]:
         result = self._structured(

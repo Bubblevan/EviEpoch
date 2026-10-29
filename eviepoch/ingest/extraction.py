@@ -20,7 +20,9 @@ Every node: {"key":"local unique key","message":0,"quote":"unique EXACT contiguo
 Date strings are YYYY, YYYY-MM, or YYYY-MM-DD, preserving actual precision. Resolve relative dates ONLY
 from the supplied temporal_anchor.time; it may identify an original message time inside a transport record.
 An ambiguous anchor does not permit a guessed date. Never substitute ingestion time. time_quote is an exact substring
-supporting any date (may be empty only when using the message timestamp). Planned dates do not replace current facts.
+supporting a date when the date is stated in message content. When relying on temporal_anchor.time, leave time_quote
+empty: the anchor is metadata, not a quote from message content. Never copy its normalized timestamp into time_quote.
+Planned dates do not replace current facts.
 Distinguish actual changes from correcting a mistaken statement. Preserve scoped preferences, negation,
 numbers, safety constraints, rule versions, prerequisites, ordered steps, and exceptions.
 Do not merge same-name entities without identity evidence. Use subject identifiers from known nodes
@@ -127,12 +129,20 @@ def validate_extraction(data: dict, sources: list[Source], known: Snapshot, max_
             if time_quote:
                 index = item["message"]
                 start, end = windows[index] if windows else (0, len(source.content))
-                locate(source, time_quote, char_start=start, char_end=end, occurrence=0)
-                valid.expression = event.expression = time_quote
-            elif not time_anchor["time"] or any(
+                window = source.content[start:end]
+                # Models sometimes echo the supplied normalized timestamp as a quote.
+                # That timestamp is trusted metadata, not literal source text. Treat only
+                # an exact echo of the unambiguous anchor as anchor usage; all other quotes
+                # still have to exist verbatim inside the original message window.
+                if time_quote == time_anchor["time"] and time_quote not in window:
+                    time_quote = ""
+                else:
+                    locate(source, time_quote, char_start=start, char_end=end, occurrence=0)
+                    valid.expression = event.expression = time_quote
+            if not time_quote and (not time_anchor["time"] or any(
                 bound.earliest and not time_anchor["time"].startswith(bound.earliest[:len(bound.expression)])
                 for bound in (valid, event)
-            ):
+            )):
                 raise InvalidExtraction("a normalized date needs a source time anchor")
         oid = stable_id(source.id, span.id, key, EXTRACTION_VERSION)
         local[key] = oid

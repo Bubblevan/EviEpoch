@@ -6,11 +6,12 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import test_lifecycle as fixtures
-from eviepoch.domain import Node, QueryPlan, Snapshot, Source, TimeBounds, namespace
+from eviepoch.domain import InvalidExtraction, Node, QueryPlan, Snapshot, Source, TimeBounds, namespace, timestamp
 from eviepoch.domain.requests import AddRequest, Message, SearchRequest
-from eviepoch.ingest.extraction import PLAN_PROMPT, parse_plan
+from eviepoch.ingest.extraction import EXTRACTION_PROMPT, PLAN_PROMPT, parse_plan
 from eviepoch.ingest.temporal import message_anchor, relative_bounds
 from eviepoch.manage.temporal import project_query_state
 from eviepoch.providers import Providers, ProviderUnavailable, StructuredOutputInvalid
@@ -30,6 +31,65 @@ class ImprovementControls(fixtures.LifecycleTests):
         self.assertNotIn('"order_by":"event|first_mention|record"', PLAN_PROMPT)
         plan = parse_plan({"intents": ["fact"], "order_by": "event", "obligations": []}, "query")
         self.assertEqual(plan.order_by, "event")
+
+    def test_temporal_anchor_echo_is_metadata_not_a_source_quote(self):
+        content = "The event was confirmed."
+        anchor = timestamp(1704067200000)
+        self.assertIn("Never copy its normalized timestamp into time_quote.", EXTRACTION_PROMPT)
+        self.add(content, [fixtures.fact(content, "confirmed", predicate="status", kind="event",
+                                         event_date="2024-01-01", time_quote=anchor)],
+                 rid="anchor-echo", timestamp=1704067200000)
+        node = next(n for n in self.inspect()["nodes"] if n["kind"] == "event")
+        self.assertEqual(node["occurrence_time"]["earliest"], "2024-01-01")
+
+    def test_non_anchor_time_quote_still_fails_exact_source_validation(self):
+        content = "The event was confirmed."
+        with self.assertRaises(InvalidExtraction):
+            self.add(content, [fixtures.fact(content, "confirmed", predicate="status", kind="event",
+                                             event_date="2024-01-01", time_quote="not a source quote")],
+                     rid="invalid-time-quote", timestamp=1704067200000)
+
+    def test_repair_prompt_receives_the_invalid_draft_as_untrusted_context(self):
+        request = AddRequest("repair-context", "u", "s", [Message("user", "Synthetic fact is teal.")])
+        sources = self.pipeline._build_sources(request, namespace("u"), "2026-01-01T00:00:00Z")
+        previous = {"nodes": [{"quote": "not in source"}], "relations": [], "governance": []}
+        captured = {}
+        provider = Providers(self.config)
+
+        def capture(system, user, *, stage):
+            captured.update(system=system, user=json.loads(user), stage=stage)
+            return {"nodes": [], "relations": [], "governance": []}
+
+        with patch.object(provider, "_structured", side_effect=capture):
+            provider.repair_extraction(sources, Snapshot(0, 0, {}, {}, []),
+                                       InvalidExtraction("quote is absent from the authoritative source"),
+                                       previous=previous)
+        self.assertEqual(captured["stage"], "extract_repair")
+        self.assertEqual(captured["user"]["previous_invalid_output"], previous)
+        self.assertEqual(captured["user"]["validation_error"],
+                         "quote is absent from the authoritative source")
+        self.assertIn("untrusted model-generated data", captured["system"])
+
+    def test_raw_ingest_fallback_keeps_source_searchable_without_unverified_nodes(self):
+        self.pipeline.config = replace(self.config, raw_ingest_fallback=True,
+                                       structured_ingest_enabled=False, proof_binding_enabled=False,
+                                       gap_iterations=0)
+
+        def fail_extract(_sources, _known):
+            raise ProviderUnavailable("synthetic extraction timeout", stage="extract")
+
+        self.provider.extract = fail_extract
+        content = "Synthetic preference is teal."
+        self.pipeline.add(AddRequest("raw-fallback", "u", "s", [Message("user", content)]))
+        stored = self.inspect()
+        self.assertEqual([source["content"] for source in stored["sources"]], [content])
+        self.assertEqual(stored["nodes"], [])
+        result = self.pipeline.search(SearchRequest("teal preference", "u", 5))
+        self.assertTrue(result["data"])
+        self.assertIn(content, result["data"][0]["content"])
+
+    def test_raw_ingest_fallback_is_disabled_by_default(self):
+        self.assertFalse(self.config.raw_ingest_fallback)
 
     def test_cross_user_model_stages_overlap(self):
         for user in ("u", "v"):

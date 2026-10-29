@@ -60,6 +60,7 @@ class Settings:
     auth_scheme: str = "bearer"
     auth_token: str = ""
     extract_facts: bool = True
+    raw_ingest_fallback: bool = False
     recall_query: bool = True
     recall_weight: float = 0.5
     return_limit: int = 100
@@ -118,6 +119,7 @@ class Settings:
             auth_scheme=os.getenv("EPOCH_AUTH_SCHEME", "bearer").strip().lower(),
             auth_token=os.getenv("EPOCH_AUTH_TOKEN", ""),
             extract_facts=_bool("EPOCH_EXTRACT_FACTS", True),
+            raw_ingest_fallback=_bool("EPOCH_RAW_INGEST_FALLBACK", False),
             recall_query=_bool("EPOCH_RECALL_QUERY", True),
             recall_weight=_float("EPOCH_RECALL_WEIGHT", 0.5),
             return_limit=_int("EPOCH_RETURN_LIMIT", 100),

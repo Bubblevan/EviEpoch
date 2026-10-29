@@ -196,6 +196,18 @@ def log_pipeline_failure(*, stage: str, error) -> None:
     log.warning("%s", json.dumps(event, sort_keys=True, separators=(",", ":")))
 
 
+def log_ingest_degraded(*, error, source_count: int) -> None:
+    """Record source-only publication without exposing message content or IDs."""
+    event = {
+        "event": "ingest_degraded",
+        "stage": _safe_label(getattr(error, "stage", None), "extract"),
+        "error_code": _error_code(error),
+        "source_count": max(0, int(source_count)),
+        **_context_fields(),
+    }
+    log.warning("%s", json.dumps(event, sort_keys=True, separators=(",", ":")))
+
+
 def log_search_result(trace) -> None:
     """Counts and stage timings only; IDs, paths, query and content never leave the trace."""
     event = {"event": "search_selection", **_context_fields()}

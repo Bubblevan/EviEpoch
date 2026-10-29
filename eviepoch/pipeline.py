@@ -22,7 +22,7 @@ from .providers import Providers, ProviderUnavailable, StructuredOutputTruncated
 from .storage import Repository
 from .retrieval import retrieve
 from .observability.metrics import Metrics, measured
-from .observability.diagnostics import log_pipeline_failure
+from .observability.diagnostics import log_ingest_degraded, log_pipeline_failure
 
 
 class SourceLocator(BaseModel):
@@ -81,7 +81,7 @@ def _extract_batch(providers, batch, known, max_facts, consume=lambda: None):
         if repair is None:
             raise
         consume()
-        repaired = repair(parts, known, exc)
+        repaired = repair(parts, known, exc, previous=data)
         try:
             return validate_extraction(repaired, originals, known, max_facts, windows)
         except InvalidExtraction as repair_error:
@@ -240,7 +240,15 @@ class MemoryPipeline:
             sources = self._build_sources(request, ns, stored)
             with self.store.view(ns) as view:
                 known = view.context("\n".join(s.content for s in sources))
-            spans, nodes, edges, policies = self._extract_sources(sources, known)
+            try:
+                spans, nodes, edges, policies = self._extract_sources(sources, known)
+            except (InvalidExtraction, ProviderUnavailable) as exc:
+                if not self.config.raw_ingest_fallback:
+                    raise
+                # Preserve the authoritative messages but publish no unvalidated
+                # model-derived facts, spans, relations, or governance decisions.
+                spans, nodes, edges, policies = [], [], [], []
+                log_ingest_degraded(error=exc, source_count=len(sources))
             representations = {s.id: s.render() for s in sources}
             representations.update({n.id: n.representation() for n in nodes})
             values = self.providers.embed(list(representations.values()))
