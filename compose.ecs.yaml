@@ -1,0 +1,17 @@
+services:
+  eviepoch:
+    cpus: "1.50"
+    mem_limit: 700m
+    mem_reservation: 550m
+    environment:
+      EPOCH_AUDIT_DIR: /var/lib/eviepoch/audit
+      EPOCH_AUDIT_MAX_BODY_BYTES: "1048576"
+      EPOCH_AUDIT_MAX_DISK_BYTES: "8589934592"
+      EPOCH_AUDIT_RETENTION_DAYS: "30"
+    volumes:
+      - /var/lib/eviepoch/audit:/var/lib/eviepoch/audit
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
