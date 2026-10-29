@@ -94,3 +94,16 @@ The audit export contained 50 authenticated Add/Search records: 17 Add 200 (one 
 During the test, the service cgroup peak was 163,930,112 bytes (about 156 MiB), below its 700 MiB cap; the host root disk had about 35 GiB free. No OOM was observed. The test establishes that one 16-way Add burst succeeded, but Search did not meet a 16-way success target. The current service is not validated for 16 concurrent Search and should not be described as 16-way evaluation-ready. The 503s need stage-specific, content-free diagnostics before attributing them conclusively to the ECS, SQLite, or a provider.
 
 The downloaded audit file is for private analysis only; keep it outside Git. This provider-backed test used DeepSeek and text-embedding-v4. Provider token usage and monetary cost are not exposed by the current service, so no exact cost is claimed. No official Smoke or Full was started.
+
+
+## Secondary .com ECS deployment (2026-10-29)
+
+The restored Hong Kong ECS at bubblevan.bbroot.com is now running the same EviEpoch application code on an independent configuration and database, separately from bubblevan.de5.net. The two instances do not share SQLite data.
+
+The existing Compose project and named SQLite volume were preserved. The application listens on 127.0.0.1:8012 behind the existing trusted Caddy certificate. Public /health and /v1/memories/health both returned HTTP 200 with TLS verification; unauthenticated Add and Search returned HTTP 401. A valid authenticated zero-work Search (top_k=0) through the Caddy domain route returned HTTP 200.
+
+One synthetic provider-backed Add and Search were run through the container application endpoint: Add HTTP 200 in 3,141 ms; Search HTTP 200 in 1,680 ms and returned the matching marker. This is a single functional probe, not a concurrency measurement. The exported .com audit file contained 3 records (Add 200: 1, Search 200: 2), all synthetic; request bodies were present and are stored locally at Downloads/EviEpoch-bbroot-audit-20261029. No official Smoke or Full was started.
+
+The .com service is configured for 16 concurrent Add and 16 concurrent Search requests, 1.5 CPU cores, 700 MiB RAM, 1 MiB per captured body, 8 GiB audit storage, and 30-day retention. A post-restart observation showed about 49 MiB container memory use and 32 GiB free root disk. No 16-way load run was performed on this instance, so its provider-backed concurrency capacity remains unverified.
+
+Before the update, an online SQLite backup was stored at /var/backups/eviepoch-bbroot-20261029/eviepoch-v1-pre-audit.sqlite3 and the previous image was tagged eviepoch-ecs/eviepoch:pre-audit-20261029. The existing .env was not replaced. The deployed image includes the AMI MIT license notice.
