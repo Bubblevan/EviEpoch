@@ -23,7 +23,14 @@ def disclose(query, plan, selected, snapshot, providers):
         source = snapshot.sources[original.source_id]
         for quote in quotes:
             if not isinstance(quote, str) or not quote.strip() or quote not in original.content or quote not in source.content:
-                raise ProviderUnavailable("disclosure quote is not selected source evidence", stage="disclosure")
+                # A model may accidentally include one unmatched closing quote as part of the excerpt.
+                # Recover only when removing that single delimiter yields an exact substring of both
+                # the selected evidence and its authoritative source; never fuzzy-match or rewrite text.
+                if (isinstance(quote, str) and len(quote) > 8 and quote[-1] in {'"', "'", "”", "’"}
+                        and quote[:-1] in original.content and quote[:-1] in source.content):
+                    quote = quote[:-1]
+                else:
+                    raise ProviderUnavailable("disclosure quote is not selected source evidence", stage="disclosure")
             # Source-offset IDs distinguish repeated occurrences; the first exact one is stable.
             span = locate(source, quote, occurrence=0)
             from .engine import Evidence

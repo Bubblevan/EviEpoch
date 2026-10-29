@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import test_lifecycle as fixtures
 from eviepoch.domain import Node, QueryPlan, Snapshot, Source, TimeBounds, namespace
 from eviepoch.domain.requests import AddRequest, Message, SearchRequest
+from eviepoch.ingest.extraction import PLAN_PROMPT, parse_plan
 from eviepoch.ingest.temporal import message_anchor, relative_bounds
 from eviepoch.manage.temporal import project_query_state
 from eviepoch.providers import Providers, ProviderUnavailable, StructuredOutputInvalid
@@ -23,6 +24,13 @@ def triple(subject, relation, value, sid, rid, vid, update=False):
 
 
 class ImprovementControls(fixtures.LifecycleTests):
+    def test_query_plan_prompt_uses_single_supported_order_axis(self):
+        self.assertIn('"order_by":"event"', PLAN_PROMPT)
+        self.assertIn("Set order_by to exactly one of event, first_mention, or record.", PLAN_PROMPT)
+        self.assertNotIn('"order_by":"event|first_mention|record"', PLAN_PROMPT)
+        plan = parse_plan({"intents": ["fact"], "order_by": "event", "obligations": []}, "query")
+        self.assertEqual(plan.order_by, "event")
+
     def test_cross_user_model_stages_overlap(self):
         for user in ("u", "v"):
             self.add("Synthetic preference is teal.", user=user)
@@ -263,6 +271,13 @@ class ImprovementControls(fixtures.LifecycleTests):
         self.assertIn("Friday", json.dumps(response))
         self.assertEqual(trace["selection_status"], "disclosed_spans")
         self.assertTrue(trace["missing_obligations"], "an excerpt is not automatically a complete source proof")
+
+    def test_disclosure_trims_only_an_unmatched_terminal_quote_delimiter(self):
+        self.add("Public schedule is Friday. The archive contains a later quote mark: \".")
+        self.provider.disclose_evidence = lambda q, p, es: {"decisions": [
+            {"id": e.id, "quotes": ['Public schedule is Friday."']} for e in es]}
+        response = self.pipeline.search(SearchRequest("Public schedule", "u", 5))
+        self.assertTrue(response["data"][0]["content"].endswith("Public schedule is Friday."))
 
     def test_unknown_attribute_can_remove_irrelevant_biography(self):
         self.add("Rae enjoys sailing and works in design.")
