@@ -13,6 +13,13 @@ def message_anchor(source):
     # Recognized record wrappers only: a random date in prose is not a chat timestamp.
     for match in re.finditer(r"\[Time:\s*(" + _ISO + r")\]", text):
         candidates.append((match.group(1), match.group(0)))
+    for match in re.finditer(r"\[Time:\s*([A-Za-z]{3} \d{1,2}, \d{4}, \d{2}:\d{2}(?::\d{2})?)\]", text):
+        for fmt in ("%b %d, %Y, %H:%M:%S", "%b %d, %Y, %H:%M"):
+            try:
+                candidates.append((datetime.strptime(match.group(1), fmt).isoformat(), match.group(0)))
+                break
+            except ValueError:
+                continue
     if re.match(r"^(?:\[[^\]\n]+\]){2,}", text):
         match = re.search(r"\n(" + _ISO + r")\s*$", text)
         if match:
@@ -34,8 +41,12 @@ def message_anchor(source):
 
 
 def anchor_for(source):
-    return source.locator.get("temporal_anchor", {"time": source.asserted_at, "kind": "transport",
-                                                 "quote": "", "ambiguous": False})
+    stored = source.locator.get("temporal_anchor")
+    if stored is not None and stored.get("kind") == "transport":
+        # Older indexes may predate a supported timestamp wrapper. Re-read the same
+        # authoritative bytes, without changing the persisted transport timestamp.
+        return message_anchor(source)
+    return stored or {"time": source.asserted_at, "kind": "transport", "quote": "", "ambiguous": False}
 
 
 def relative_bounds(expression, anchor):

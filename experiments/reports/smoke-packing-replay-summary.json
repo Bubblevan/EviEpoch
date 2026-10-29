@@ -1,0 +1,90 @@
+{
+  "official_score": false,
+  "scope": "aggregate debugging metadata only; no queries, identities, source text, evidence or gold answers",
+  "rounds": [
+    {
+      "round": "replay-r1",
+      "add_mode": "live",
+      "search_mode": "live DeepSeek",
+      "counts": {
+        "/add_200": 133,
+        "/search_200": 49,
+        "/search_503": 2,
+        "/add_503": 1
+      },
+      "usage": {
+        "chat_calls": 342,
+        "embedding_calls": 478,
+        "input_tokens": 3390581,
+        "output_tokens": 324313
+      }
+    },
+    {
+      "round": "replay-r2",
+      "add_mode": "live",
+      "search_mode": "live DeepSeek",
+      "counts": {
+        "/add_200": 134,
+        "/search_200": 50,
+        "/search_503": 1
+      },
+      "usage": {
+        "chat_calls": 336,
+        "embedding_calls": 466,
+        "input_tokens": 3062695,
+        "output_tokens": 248630
+      }
+    },
+    {
+      "round": "replay-r3",
+      "add_mode": "frozen r2 extraction and vectors",
+      "search_mode": "live DeepSeek",
+      "counts": {
+        "/add_200": 134,
+        "/search_200": 50,
+        "/search_503": 1
+      },
+      "usage": {
+        "chat_calls": 189,
+        "embedding_calls": 53,
+        "input_tokens": 1340999,
+        "output_tokens": 28174,
+        "frozen_add": {
+          "chat": 145,
+          "embedding_texts": 3403
+        }
+      }
+    },
+    {
+      "round": "replay-r4",
+      "add_mode": "frozen r2 extraction and vectors",
+      "search_mode": "live DeepSeek",
+      "counts": {
+        "/add_200": 134,
+        "/search_200": 51
+      },
+      "usage": {
+        "chat_calls": 185,
+        "embedding_calls": 53,
+        "input_tokens": 1463750,
+        "output_tokens": 27162,
+        "frozen_add": {
+          "chat": 145,
+          "embedding_texts": 3403
+        }
+      }
+    }
+  ],
+  "final_mechanism_checks": {
+    "all_185_http_success": true,
+    "cold_start_remains_empty": true,
+    "time_support_not_suppressed": true,
+    "unknown_attribute_abstention": true,
+    "worked_examples_have_operational_context": true,
+    "numeric_observations_retained": true,
+    "restricted_item_not_disclosed": true,
+    "previous_rule_503s_succeed": true,
+    "frozen_sources_and_generations_identical": true
+  },
+  "final_passed": true
+}

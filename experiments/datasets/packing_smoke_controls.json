@@ -1,0 +1,136 @@
+{
+  "scope": "independent synthetic controls; no private evaluation material",
+  "cases": [
+    {
+      "id": "worked-example",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Completed worked example:\n{\"dataset\": \"TOY\", \"task_index\": 7, \"trajectory\": [{\"role\": \"user\", \"content\": \"Move a blue cube from zone A to shelf C using the toy mover API.\"}, {\"role\": \"assistant\", \"tool_calls\": [{\"function\": {\"name\": \"move_cube\", \"arguments\": \"{\\\"cube\\\":\\\"blue\\\",\\\"from\\\":\\\"A\\\",\\\"to\\\":\\\"C\\\"}\"}}]}, {\"role\": \"tool\", \"content\": \"Cube moved successfully to shelf C.\"}], \"eval_feedback\": {\"status\": \"completed\", \"reward\": 1}}"
+        }
+      ],
+      "query": "TOY task index 99",
+      "required": [
+        "move_cube",
+        "shelf C"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "measurement-context",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Synthetic adsorption measurements at 295 K.\ntime_s\tuptake_mg_g\n0\t0.0\n10\t4.5\n30\t8.0\n60\t8.3\nUse these observations as data; no fitted conclusion is supplied."
+        }
+      ],
+      "query": "Compare the initial and later uptake rates using the synthetic measurements and their units.",
+      "required": [
+        "time_s",
+        "uptake_mg_g",
+        "4.5",
+        "8.3"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "human-time",
+      "messages": [
+        {
+          "role": "user",
+          "content": "[Time: Feb 14, 2021, 09:30:00] Casey: I joined the ceramics club yesterday."
+        }
+      ],
+      "query": "When did Casey join the ceramics club?",
+      "required": [
+        "Casey",
+        "yesterday",
+        "2021-02-14"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "transport-time",
+      "messages": [
+        {
+          "role": "user",
+          "content": "[archive][session_1][D1:1][text] Morgan: I enrolled in the music workshop yesterday.\n2020-03-01 09:15",
+          "timestamp": 1704153600000
+        }
+      ],
+      "query": "When did Morgan enroll in the music workshop?",
+      "required": [
+        "Morgan",
+        "yesterday",
+        "2020-03-01"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "restricted-excerpt",
+      "messages": [
+        {
+          "role": "user",
+          "content": "[Time: Feb 14, 2021, 09:30:00] Private Author: Public meeting is Friday. Restricted marker is VIOLET-ZEBRA."
+        }
+      ],
+      "query": "Give the public meeting schedule. Do not disclose the restricted marker, author name or source timestamp.",
+      "required": [
+        "Friday"
+      ],
+      "forbidden": [
+        "VIOLET-ZEBRA",
+        "Private Author",
+        "2021-02-14"
+      ]
+    },
+    {
+      "id": "unknown-attribute",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Taylor works in design and enjoys pottery."
+        }
+      ],
+      "query": "What is Taylor's shoe size?",
+      "required": [],
+      "forbidden": [],
+      "must_abstain": true
+    },
+    {
+      "id": "duration-premise",
+      "messages": [
+        {
+          "role": "user",
+          "content": "[archive][session_1][D1:1][text] Lee: I've owned this bicycle for 4 years.\n2022-06-10 09:00"
+        }
+      ],
+      "query": "Which year did Lee acquire this bicycle?",
+      "required": [
+        "Lee",
+        "4 years",
+        "2022-06-10"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "unresolved-conflict",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Workshop record A: the meeting room is north."
+        },
+        {
+          "role": "user",
+          "content": "Workshop record B: the meeting room is south. The records have not been reconciled."
+        }
+      ],
+      "query": "What do the workshop records say about the meeting room?",
+      "required": [
+        "north",
+        "south"
+      ],
+      "forbidden": []
+    }
+  ]
+}

@@ -93,11 +93,21 @@ class Source:
     timestamp_value: int | None = None
 
     def render(self) -> str:
-        mark = f"[{self.asserted_at}]" if self.asserted_at else ""
-        anchor = self.locator.get("temporal_anchor", {})
+        from ..ingest.temporal import anchor_for
+        anchor = anchor_for(self)
+        primary = anchor.get("time") if anchor.get("kind") == "original_message" else self.asserted_at
+        mark = f"[{primary}]" if primary else ""
         if anchor.get("kind") == "original_message" and anchor.get("time") != self.asserted_at:
             mark += f"[original_message_time={anchor['time']}]"
+            if self.asserted_at:
+                mark += f"[transport_time={self.asserted_at}]"
         return f"{mark}[{self.role}] {self.content}"
+
+    @property
+    def evidence_time(self):
+        from ..ingest.temporal import anchor_for
+        anchor = anchor_for(self)
+        return anchor.get("time") if anchor.get("kind") == "original_message" else self.asserted_at
 
 
 @dataclass

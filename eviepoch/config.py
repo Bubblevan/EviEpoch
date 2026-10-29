@@ -80,6 +80,7 @@ class Settings:
     coverage_enabled: bool = True
     episode_navigation_enabled: bool = True
     disclosure_enabled: bool = True
+    support_audit_enabled: bool = True
     binder_window_chars: int = 3200
     coverage_source_limit: int = 32
 
@@ -139,6 +140,7 @@ class Settings:
             coverage_enabled=_bool("EPOCH_COVERAGE", True),
             episode_navigation_enabled=_bool("EPOCH_EPISODE_NAVIGATION", True),
             disclosure_enabled=_bool("EPOCH_DISCLOSURE", True),
+            support_audit_enabled=_bool("EPOCH_SUPPORT_AUDIT", True),
             binder_window_chars=_int("EPOCH_BINDER_WINDOW_CHARS", 3200),
             coverage_source_limit=_int("EPOCH_COVERAGE_SOURCE_LIMIT", 32),
         )

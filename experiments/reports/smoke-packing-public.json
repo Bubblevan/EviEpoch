@@ -1,0 +1,143 @@
+{
+  "official_score": false,
+  "scope": "independent synthetic cases through local HTTP and real DeepSeek; content checks, not task execution success",
+  "model": "deepseek-flash",
+  "checks": 16,
+  "passed": true,
+  "rows": [
+    {
+      "case": "worked-example",
+      "round": 0,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 3.646
+    },
+    {
+      "case": "worked-example",
+      "round": 1,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 3.11
+    },
+    {
+      "case": "measurement-context",
+      "round": 0,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 4.377
+    },
+    {
+      "case": "measurement-context",
+      "round": 1,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 4.327
+    },
+    {
+      "case": "human-time",
+      "round": 0,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 2.816
+    },
+    {
+      "case": "human-time",
+      "round": 1,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 3.168
+    },
+    {
+      "case": "transport-time",
+      "round": 0,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 3.002
+    },
+    {
+      "case": "transport-time",
+      "round": 1,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 2.65
+    },
+    {
+      "case": "restricted-excerpt",
+      "round": 0,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 3.646
+    },
+    {
+      "case": "restricted-excerpt",
+      "round": 1,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 3.697
+    },
+    {
+      "case": "unknown-attribute",
+      "round": 0,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 3.411
+    },
+    {
+      "case": "unknown-attribute",
+      "round": 1,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 3.236
+    },
+    {
+      "case": "duration-premise",
+      "round": 0,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 2.94
+    },
+    {
+      "case": "duration-premise",
+      "round": 1,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 2.55
+    },
+    {
+      "case": "unresolved-conflict",
+      "round": 0,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 3.778
+    },
+    {
+      "case": "unresolved-conflict",
+      "round": 1,
+      "add_status": 200,
+      "search_status": 200,
+      "passed": true,
+      "seconds": 4.249
+    }
+  ],
+  "usage_delta": {
+    "chat_calls": 63,
+    "embedding_calls": 24,
+    "input_tokens": 53570,
+    "output_tokens": 5222
+  }
+}

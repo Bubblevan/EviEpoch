@@ -10,6 +10,7 @@ import numpy as np
 from . import tokens
 from ..domain import InvalidExtraction, Obligation, QueryPlan, Snapshot
 from .lexical import terms
+from .context import temporal_value_request, worked_example_for_reference
 from .fusion import merge
 from ..providers import ProviderUnavailable
 from ..manage.temporal import project_state_edges, project_query_state
@@ -321,6 +322,9 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
     snap = project_state_edges(snap)
     if config.state_projection_enabled:
         snap = project_query_state(snap, plan)
+    transfer_sources = [sid for sid, source in snap.sources.items() if worked_example_for_reference(request.query, source)]
+    if transfer_sources and "procedure" not in plan.intents:
+        plan.intents.append("procedure")
     for node in snap.nodes.values():
         score = fused.get(node.id, 0.0)
         # Temporal state preference only adjusts query-relevant objects, never arbitrary recent facts.
@@ -392,7 +396,14 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
                 plan.obligations.append(Obligation(f"coverage_{i}", request.query, alternatives=[[sid]]))
         if coverage_truncated:
             plan.obligations.append(Obligation("coverage_remainder", request.query))
-    evidence = {sid: Evidence(sid, source.render(), source.asserted_at,
+    if transfer_sources:
+        live_examples = [[sid] for sid in transfer_sources if sid in snap.sources]
+        if live_examples:
+            # An opaque task-reference adapter provides no target-instance facts.
+            # The stored, same-domain worked example is an available procedure,
+            # not a claim that its task ID equals the new one or solves it.
+            plan.obligations.append(Obligation("worked_example", "source-backed tool experience", alternatives=live_examples))
+    evidence = {sid: Evidence(sid, source.render(), source.evidence_time,
                              source_scores.get(sid, 0.0), sid) for sid, source in snap.sources.items()}
     token_budget = tokens.budget(config, request.query, request.options)
     # Exact spans rescue long sources that cannot fit as a whole. They have stable source-bound IDs.
@@ -405,10 +416,10 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
         if matching:
             span = matching[0]
             source = snap.sources[sid]
-            stamp = f"[{source.asserted_at}]" if source.asserted_at else ""
+            stamp = source.render()[:-len(source.content)]
             replacements[sid] = span.id
             evidence.pop(sid)
-            evidence[span.id] = Evidence(span.id, f"{stamp}[{source.role}] {span.quote}", source.asserted_at, e.score, sid)
+            evidence[span.id] = Evidence(span.id, f"{stamp}{span.quote}", source.evidence_time, e.score, sid)
     # A source-level AND proof is not automatically satisfied by one replacement span.
     # Unaffordable full-source groups remain missing; audited spans are partial fallback evidence.
     recorder = getattr(providers, "record_selection", None)
@@ -428,6 +439,20 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
             # never claim that an arbitrary excerpt completed a whole-source proof.
             selected = select(plan, {e.id: e for e in selected}, config, request.top_k, token_budget, "topk")
             selection_status = "disclosed_spans" if selected else "no_disclosable_support"
+    audit = getattr(providers, "audit_attribute_support", None) or getattr(providers, "audit_evidence", None)
+    if (config.support_audit_enabled and audit is not None and selected and not transfer_sources
+            and not temporal_value_request(request.query, plan)
+            and not set(plan.intents) & {"global", "list", "order", "why", "procedure", "history", "comparison"}):
+        units = {e.id: replace(snap.sources[e.source_id], id=e.id, content=e.content) for e in selected}
+        support = audit(request.query, plan, units)
+        if (not isinstance(support, dict) or support.get("status") not in {"relevant", "insufficient", "uncertain"}
+                or not isinstance(support.get("ids"), list)
+                or any(not isinstance(eid, str) or eid not in units for eid in support["ids"])
+                or bool(support["ids"]) != (support["status"] in {"relevant", "uncertain"})):
+            raise ProviderUnavailable("invalid final attribute support audit", stage="support_audit")
+        selected = [e for e in selected if e.id in support["ids"]]
+        if not selected:
+            selection_status = "no_attribute_support"
     if "order" in plan.intents:
         from ..ingest.temporal import anchor_for
         def order_key(e):
@@ -448,9 +473,11 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
     trace = {"generation": view.generation, "policy_generation": view.policy_generation,
              "plan": asdict(plan), "candidates": len(evidence), "selected_ids": sorted(selected_ids),
              "returned_source_ids": sorted({e.source_id for e in selected}),
+             "evidence_sources": {e.id: e.source_id for e in selected},
              "binding_status": binding_status, "selection_status": selection_status,
              "timings_ms": timings, "coverage_candidates": len(coverage_ids),
              "coverage_truncated": coverage_truncated,
+             "worked_example_candidates": len(transfer_sources),
              "covered_obligations": [o.id for o in plan.obligations if any(set(g) <= selected_ids for g in o.alternatives)],
              "missing_obligations": [o.id for o in plan.obligations if not any(set(g) <= selected_ids for g in o.alternatives)],
              "source_paths": [asdict(e) for e in snap.edges],

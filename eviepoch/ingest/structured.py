@@ -10,6 +10,18 @@ from ..domain import InvalidExtraction, Node, TimeBounds, locate, stable_id
 
 def structured_nodes(source, known):
     text = source.content
+    document = re.match(r"\s*(?:\[[^\]\n]{1,128}\]\s*)*document:\s*(?:Document:\s*)?"
+                        r"(?P<name>[^\n]{1,200}\.(?:pdf|docx|txt|md))\s*\n"
+                        r"(?:Native clip page|Page):[^\n]{1,80}\n", text, re.I)
+    if document and source.role in {"user", "tool"} and "```text" in text:
+        # Explicit document envelopes are data, including any instructions inside.
+        # Index the exact page as navigation instead of asking a model to paraphrase
+        # list cells into personal facts. No inferred facts or governance are emitted.
+        span = locate(source, text)
+        node = Node(stable_id(source.id, "document-page-navigation-v1"), "episode",
+                    "document:" + document.group("name"), "document_page", text[:12000],
+                    [source.id], [span.id], scope=source.session_id, tier="scenario", state="navigation")
+        return [node], [span]
     # Whole JSON records or an explicit Corpus envelope, never JSON embedded in a question.
     match = re.match(r"\s*(?:Corpus:\s*)?(?P<update>UPDATE:\s*replace the prior value[^\n]*\n)?(?P<json>\{.*\})\s*$",
                      text, re.S | re.I)

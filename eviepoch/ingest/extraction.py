@@ -54,6 +54,8 @@ Set order_by to exactly one of event, first_mention, or record.
 Use AND obligations for independent necessary facts (e.g. both events in a before/after question).
 Include rule, prerequisite, exception and observed condition for procedure tasks; upstream causes for why.
 Use global for whole-history synthesis, list for enumerations, order for stages or first-mention sequences.
+Use global when reasoning must combine measurements, datasets or multiple analyses; retrieve the underlying
+observations, headers, units and conditions, not just a sentence that already states an answer.
 For order questions distinguish event time, first mention time and transport record order using order_by.
 For tool experience retrieval, distinguish recalling the same task from transferring a worked example to a new task;
 an opaque task number alone does not imply that a different-numbered example is irrelevant.

@@ -106,6 +106,8 @@ episode 只作有来源的导航。global/list/order 查询增加跨会话覆盖
 
 `experiments/ablate.py --improvements` 在冻结抽取/计划、模型和证据预算下逐项关闭状态投影、全局覆盖、episode、披露；提示词变更后拒绝复用旧冻结产物。独立 selector 对照排除回退和披露阶段。返回片段时，来源召回率单独记录，不把任意片段冒充完整来源证明。
 
+2026-10-30 的证据保留修复、真实本机 HTTP smoke、私有回放的脱敏元数据与验证限制见 [回放复核](docs/SMOKE_PACKING_REVIEW.md)。该轮全套离线回归为 230 项通过；本机成功结果不等于新的官方成绩。
+
 冻结候选配置：
 
 ```powershell
