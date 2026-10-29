@@ -1,0 +1,94 @@
+{
+  "official_score": false,
+  "model": "gpt-6-luna",
+  "transport": "Codex CLI using existing ChatGPT login",
+  "reasoning": "low",
+  "offline": {
+    "tests": 280,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 55.498
+  },
+  "source_hashes": {
+    "experiments/codex_provider.py": "76778772829f4d0a099b3aa4acba7d7e767c5273d946f2dfe73ed9a9f35eea34",
+    "experiments/research_config.py": "a58d39a498ac1512c8f42e37f5220f1ee347e776679be2bfab6053204b5c5f62",
+    "experiments/evaluate.py": "071ceaa162872fc695390862214c9fbdc0d10c66738b71e16e20e3251a491b32",
+    "experiments/start_research.py": "45fe46b79039d72ec3e1b8cf5e65090282731bdd3c7cba8fab0adaebf9b1468e",
+    "tests/test_codex_provider.py": "b56631ccd6d37010798f855487491d8bbd9c377b865e01acee2a20f66c8442ce"
+  },
+  "synthetic_focused": {
+    "summary": {
+      "searches": 2,
+      "complete_evidence_scored": 0,
+      "complete_evidence_unknown": 2,
+      "answers_scored": 2,
+      "complete_evidence_rate": null,
+      "complete_source_coverage_rate": 1.0,
+      "evidence_recall": 1.0,
+      "leakage_rate": 0.0,
+      "source_recall": 1.0,
+      "abstention_rate": null,
+      "proxy_answer_accuracy": 1.0,
+      "errors": 0,
+      "search_p95_seconds": 26.951980200014077
+    },
+    "acceptance": {
+      "passed": true,
+      "checks": 2,
+      "failures": [],
+      "evidence_unknown": 2,
+      "scope": "local self-authored controls; unknown evidence sufficiency is reported, not graded as complete"
+    },
+    "usage": {
+      "chat_calls": 15,
+      "embedding_calls": 7,
+      "input_tokens": 93062,
+      "output_tokens": 2092,
+      "codex_calls": 15,
+      "codex_cache_hits": 0,
+      "cached_input_tokens": 46976,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "exact_cache_replay": {
+    "cached_records": 15,
+    "fresh_cli_calls": 0,
+    "cache_hits": 15
+  },
+  "private_focused_probe": {
+    "official_score": false,
+    "scope": "one private chronological Search probe; not a full replay or answer grade",
+    "counts": {
+      "/add_200": 7,
+      "/search_200": 1
+    },
+    "verified_evidence_items": 10,
+    "all_returned_evidence_source_exact": true,
+    "usage": {
+      "chat_calls": 5,
+      "embedding_calls": 1,
+      "input_tokens": 116775,
+      "output_tokens": 1229,
+      "codex_calls": 5,
+      "codex_cache_hits": 0,
+      "cached_input_tokens": 13312,
+      "reasoning_output_tokens": 0,
+      "frozen_add": {
+        "chat": 10,
+        "embedding_texts": 113
+      }
+    },
+    "add_mode": "frozen earlier DeepSeek extraction/vectors",
+    "search_mode": "real Codex CLI gpt-6-luna"
+  },
+  "limits": {
+    "default_cli_launches_per_process": 32,
+    "shared_cache_serializes_processes": true,
+    "output_token_cap": "prompt guidance only",
+    "http_llm_fallback": false,
+    "embedding_provider_unchanged": true
+  },
+  "full_replay_completed_with_luna": false,
+  "cli_version": "0.164.0-alpha.11.1"
+}

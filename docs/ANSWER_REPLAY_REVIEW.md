@@ -1,5 +1,7 @@
 # Answer-level replay and evidence assembly, 2026-10-30
 
+This records the `c23bd01` iteration and its tested source snapshot. Subsequent research can use the explicitly requested [Codex CLI Luna backend](CODEX_LUNA_RESEARCH.md); its new validation does not rewrite the DeepSeek results below.
+
 This iteration uses the official capability breakdown to prioritize diagnosis, not to invent private per-question labels. The available API log contains Add/Search, not the platform's final Answer/Eval output. Local LLM reviews are fallible diagnostic evidence, never an official score.
 
 ## Verified failure mechanisms and changes
