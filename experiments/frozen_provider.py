@@ -3,7 +3,8 @@ import copy
 from dataclasses import asdict, replace
 
 from eviepoch.domain import InvalidExtraction, digest
-from eviepoch.providers import StructuredOutputTruncated
+from eviepoch.ingest.extraction import EXTRACTION_PROMPT, PLAN_PROMPT
+from eviepoch.providers import StructuredOutputTruncated, StructuredOutputInvalid
 from evaluate import PublicReplay
 
 
@@ -22,13 +23,14 @@ class FrozenPublicProvider(PublicReplay):
                 raise InvalidExtraction("frozen model artifact is missing a requested input")
             try:
                 self.records[ident] = {"output": call()}
-            except StructuredOutputTruncated:
-                self.records[ident] = {"error": "StructuredOutputTruncated"}
+            except (StructuredOutputTruncated, StructuredOutputInvalid) as exc:
+                self.records[ident] = {"error": type(exc).__name__}
         else:
             self.frozen_hits += 1
         record = self.records[ident]
         if record.get("error"):
-            raise StructuredOutputTruncated("replayed output truncation")
+            error = StructuredOutputInvalid if record["error"] == "StructuredOutputInvalid" else StructuredOutputTruncated
+            raise error("replayed structured output fault")
         return copy.deepcopy(record["output"])
 
     @staticmethod
@@ -39,11 +41,11 @@ class FrozenPublicProvider(PublicReplay):
 
     def extract(self, sources, known):
         # Canonical extraction never sees summaries that disappear in another arm.
-        context = replace(known, nodes={k: n for k, n in known.nodes.items() if n.kind != "summary"})
+        context = replace(known, nodes={k: n for k, n in known.nodes.items() if n.kind not in {"summary", "episode"}})
         return self._frozen("extract", self._sources(sources), lambda: self.actual.extract(sources, context))
 
     def repair_extraction(self, sources, known, error):
-        context = replace(known, nodes={k: n for k, n in known.nodes.items() if n.kind != "summary"})
+        context = replace(known, nodes={k: n for k, n in known.nodes.items() if n.kind not in {"summary", "episode"}})
         return self._frozen("repair", self._sources(sources), lambda: self.actual.repair_extraction(sources, context, error))
 
     def verify_changes(self, proposed, sources, known):
@@ -64,11 +66,16 @@ class FrozenPublicProvider(PublicReplay):
         return self._memo("bind", [query, asdict(plan), data],
                           lambda: self.actual.bind_obligations(query, plan, snapshot))
 
+    def disclose_evidence(self, query, plan, selected):
+        return self._memo("disclosure", [query, asdict(plan), [asdict(e) for e in selected]],
+                          lambda: self.actual.disclose_evidence(query, plan, selected))
+
     def record_selection(self, query, plan, evidence, budget, config):
         self.selection_records[query] = copy.deepcopy((plan, evidence, budget, config))
 
     def artifact(self):
         return {"schema": 1, "scope": "self-authored-public-controls-only", "records": self.records,
+                "prompts_hash": digest([EXTRACTION_PROMPT, PLAN_PROMPT]),
                 "artifact_hash": digest(self.records),
                 "models": {"llm": self.actual.config.llm_model, "embedding": self.actual.config.embed_model,
                            "dimensions": self.actual.config.embed_dimensions}}

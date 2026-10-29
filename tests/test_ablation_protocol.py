@@ -5,7 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "experiments"))
-from ablate import FACTORS, selector_controls, variants
+from ablate import FACTORS, IMPROVEMENTS, selector_controls, variants
 from frozen_provider import FrozenPublicProvider
 from test_lifecycle import AnnotatedProviders, fact
 from eviepoch.config import Settings
@@ -14,6 +14,15 @@ from eviepoch.retrieval import Evidence
 
 
 class AblationProtocolTests(unittest.TestCase):
+    def test_improvement_removals_hold_other_features_and_budgets_fixed(self):
+        config = Settings()
+        for name, variant in variants(config, improvements=True).items():
+            changes = [f for f in FACTORS + IMPROVEMENTS if getattr(config, f) != getattr(variant, f)]
+            self.assertEqual(len(changes), 0 if name == "full" else 1)
+            self.assertEqual(variant.answer_input_tokens, config.answer_input_tokens)
+            self.assertEqual(variant.llm_model, config.llm_model)
+            self.assertEqual(variant.temporal_anchors_enabled, config.temporal_anchors_enabled)
+
     def test_each_removal_changes_only_one_factor_not_model_or_budget(self):
         config = Settings()
         for name, variant in variants(config).items():

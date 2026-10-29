@@ -1,1 +1,1 @@
-from .client import Providers, ProviderUnavailable, StructuredOutputTruncated
+from .client import Providers, ProviderUnavailable, StructuredOutputTruncated, StructuredOutputInvalid

@@ -11,3 +11,4 @@ data/
 experiments/private-runs/
 references/
 *.pdf
+/logs/

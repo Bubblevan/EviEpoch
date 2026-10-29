@@ -10,6 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from eviepoch.domain import digest, namespace, stable_id
+from eviepoch.ingest.extraction import EXTRACTION_PROMPT, PLAN_PROMPT
 from eviepoch.manifest import build
 from eviepoch.providers import Providers
 from eviepoch.retrieval import select
@@ -19,16 +20,20 @@ from research_config import load
 
 
 FACTORS = ("relations_enabled", "consolidation_enabled", "reflection_enabled", "proof_binding_enabled")
+IMPROVEMENTS = ("state_projection_enabled", "coverage_enabled", "episode_navigation_enabled", "disclosure_enabled")
 
 
-def variants(config, factorial=False):
+def variants(config, factorial=False, improvements=False):
+    factors = IMPROVEMENTS if improvements else FACTORS
+    labels = ("no-state-projection", "no-coverage", "no-episodes", "no-disclosure") if improvements else (
+        "no-relations", "no-consolidation", "no-reflection", "no-binding")
     result = {"full": config}
     if factorial:
         for values in itertools.product((False, True), repeat=4):
             name = "r_c_f_b=" + "".join(str(int(v)) for v in values)
-            result[name] = replace(config, **dict(zip(FACTORS, values)))
+            result[name] = replace(config, **dict(zip(factors, values)))
     else:
-        for label, field in zip(("no-relations", "no-consolidation", "no-reflection", "no-binding"), FACTORS):
+        for label, field in zip(labels, factors):
             result[label] = replace(config, **{field: False})
     return result
 
@@ -75,24 +80,27 @@ def main():
     parser.add_argument("--deepseek", action="store_true")
     parser.add_argument("--answer", action="store_true")
     parser.add_argument("--factorial", action="store_true")
+    parser.add_argument("--improvements", action="store_true", help="ablate state projection, global coverage, episodes and disclosure")
     parser.add_argument("--frozen", type=Path, help="reuse a public frozen artifact; no new extraction or query plans")
     parser.add_argument("--output", type=Path, default=Path("experiments/reports/p1-ablations.json"))
     args = parser.parse_args()
     data = json.loads(args.dataset.read_text(encoding="utf-8"))
     config = replace(load(deepseek=args.deepseek), database_url="", auth_scheme="none", workbench_enabled=False,
-                     profile="full", selector="beam", **dict.fromkeys(FACTORS, True))
+                     profile="full", selector="beam", **dict.fromkeys(FACTORS + IMPROVEMENTS, True))
     config.validate()
     provider = FrozenPublicProvider(Providers(config))
     if args.frozen:
         frozen = json.loads(args.frozen.read_text(encoding="utf-8"))
         expected_models = {"llm": config.llm_model, "embedding": config.embed_model, "dimensions": config.embed_dimensions}
         if (frozen.get("artifact_hash") != digest(frozen.get("records")) or
-                frozen.get("dataset_hash") != digest(data) or frozen.get("models") != expected_models):
+                frozen.get("dataset_hash") != digest(data) or frozen.get("models") != expected_models or
+                frozen.get("prompts_hash") != digest([EXTRACTION_PROMPT, PLAN_PROMPT])):
             parser.error("frozen artifact data/model/hash mismatch")
         provider.records, provider.sealed = frozen["records"], True
     report = {"official_score": False, "dataset_hash": digest(data), "arms": {}, "errors": [],
               "protocol": "canonical L1 extraction/temporal review/query-plan frozen; same model, queries and budgets; single-factor removal",
-              "selector_protocol": "identical recorded candidates/plan/budget; independent recovery excluded",
+              "selector_protocol": "identical recorded candidates/plan/budget; recovery and disclosure excluded",
+              "factors": list(IMPROVEMENTS if args.improvements else FACTORS),
               "budget_hash": digest([config.answer_input_tokens, config.answer_prompt_tokens, config.answer_item_tokens,
                                      config.token_safety, config.char_budget]),
               "query_hash": digest([[q["query"], q.get("options"), q["top_k"]] for c in data["cases"] for q in c["searches"]])}
@@ -110,7 +118,7 @@ def main():
         report["frozen_artifact_hash"] = artifact["artifact_hash"]
         # Capture selector counterfactuals before later variants replace the provider's current snapshot.
         report["fixed_candidate_selectors"] = selector_controls(data, provider, args.answer)
-        for name, variant in variants(config, args.factorial).items():
+        for name, variant in variants(config, args.factorial, args.improvements).items():
             before = provider.frozen_hits
             rows = canonical if name == "full" else []
             if name != "full":
@@ -118,7 +126,7 @@ def main():
                     for case in data["cases"]:
                         rows.extend(evaluate(case, variant, provider, Path(folder), args.answer))
             report["arms"][name] = {"summary": summarize(rows), "rows": rows,
-                                     "factor_settings": {f: getattr(variant, f) for f in FACTORS},
+                                     "factor_settings": {f: getattr(variant, f) for f in report["factors"]},
                                      "frozen_artifact_hash": artifact["artifact_hash"], "replay_hits": provider.frozen_hits-before}
             print(json.dumps({"arm": name, **summarize(rows)}), flush=True)
             args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -126,7 +134,7 @@ def main():
         report["errors"].append({"type": type(exc).__name__, "reason": str(exc) if isinstance(exc, ValueError) else None})
     report["manifest"] = build(config)
     report["actual_usage"] = provider.usage
-    report["complete"] = not report["errors"] and len(report["arms"]) == len(variants(config, args.factorial))
+    report["complete"] = not report["errors"] and len(report["arms"]) == len(variants(config, args.factorial, args.improvements))
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return 0 if report["complete"] else 1
 

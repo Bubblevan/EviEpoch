@@ -84,16 +84,18 @@ def evaluate(case, config, providers, folder: Path, answer: bool):
             start = time.perf_counter()
             response, trace = memory.search_with_trace(SearchRequest(search["query"], user, search["top_k"], search.get("options")))
             actual = {item["id"] for item in response["data"]}
+            returned_sources = set(trace.get("returned_source_ids", actual))
             groups = [{source_ids[label] for label in group} for group in search.get("evidence_alternatives", [])]
             complete = any(group <= actual for group in groups) if groups else None
             recall = max((len(group & actual) / len(group) for group in groups if group), default=None)
             text = json.dumps(response, ensure_ascii=False)
             leakage = any(word in text for word in search.get("forbidden_text", [])) or any(
-                source_ids[label] in actual for label in search.get("forbidden_sources", []))
+                source_ids[label] in returned_sources for label in search.get("forbidden_sources", []))
             abstained = not response["data"] if search.get("must_abstain") else None
             row = {"op": "search", "case": case["id"], "id": search["id"], "capabilities": case["capabilities"],
                    "seconds": time.perf_counter() - start, "complete_evidence": complete,
                    "evidence_recall": recall, "leakage": leakage, "retrieval_abstained": abstained,
+                   "source_recall": max((len(group & returned_sources) / len(group) for group in groups if group), default=None),
                    "response": response, "trace": trace, "answer_correct": None}
             if answer:
                 answer_result = providers._structured(ANSWER_PROMPT, json.dumps({"query": search["query"],
@@ -117,6 +119,7 @@ def summarize(rows):
     durations = sorted(r["seconds"] for r in searches)
     return {"searches": len(searches), "complete_evidence_rate": average("complete_evidence"),
             "evidence_recall": average("evidence_recall"), "leakage_rate": average("leakage"),
+            "source_recall": average("source_recall"),
             "abstention_rate": average("retrieval_abstained"), "proxy_answer_accuracy": average("answer_correct"),
             "errors": sum(bool(r.get("error")) for r in searches),
             "search_p95_seconds": durations[min(len(durations)-1, int(len(durations)*0.95))] if durations else None}

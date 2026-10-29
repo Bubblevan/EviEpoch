@@ -72,6 +72,15 @@ class Settings:
     token_safety: float = 1.15
     request_timeout: float = 40.0
     max_facts: int = 24
+    search_consistency_retries: int = 2
+    temporal_anchors_enabled: bool = True
+    structured_ingest_enabled: bool = True
+    state_projection_enabled: bool = True
+    coverage_enabled: bool = True
+    episode_navigation_enabled: bool = True
+    disclosure_enabled: bool = True
+    binder_window_chars: int = 3200
+    coverage_source_limit: int = 32
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -121,6 +130,15 @@ class Settings:
             token_safety=_float("EPOCH_TOKEN_SAFETY", 1.15),
             request_timeout=_float("EPOCH_REQUEST_TIMEOUT", 40.0),
             max_facts=_int("EPOCH_MAX_FACTS", 24),
+            search_consistency_retries=_int("EPOCH_SEARCH_CONSISTENCY_RETRIES", 2),
+            temporal_anchors_enabled=_bool("EPOCH_TEMPORAL_ANCHORS", True),
+            structured_ingest_enabled=_bool("EPOCH_STRUCTURED_INGEST", True),
+            state_projection_enabled=_bool("EPOCH_STATE_PROJECTION", True),
+            coverage_enabled=_bool("EPOCH_COVERAGE", True),
+            episode_navigation_enabled=_bool("EPOCH_EPISODE_NAVIGATION", True),
+            disclosure_enabled=_bool("EPOCH_DISCLOSURE", True),
+            binder_window_chars=_int("EPOCH_BINDER_WINDOW_CHARS", 3200),
+            coverage_source_limit=_int("EPOCH_COVERAGE_SOURCE_LIMIT", 32),
         )
 
     @property
@@ -128,6 +146,9 @@ class Settings:
         return bool(self.llm_api_key)
 
     def validate(self) -> None:
+        if (not 0 <= self.search_consistency_retries <= 4 or not 256 <= self.binder_window_chars <= 16000
+                or not 1 <= self.coverage_source_limit <= 128):
+            raise ValueError("Invalid consistency, window or coverage budget")
         if self.profile not in {"full", "hybrid", "b0"} or self.selector not in {"beam", "greedy", "topk"}:
             raise ValueError("Unknown profile or selector")
         if min(self.candidate_limit, self.graph_budget, self.beam_width, self.add_concurrency, self.search_concurrency) <= 0:

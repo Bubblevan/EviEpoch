@@ -92,6 +92,10 @@ class Repository:
         with self.transaction(ns) as c:
             yield View(self, c, ns)
 
+    def read_session(self, ns: str):
+        """No connection or lock survives a database operation; models run between reads."""
+        return ReadSession(self, ns)
+
     def claim(self, ns: str, request_id: str, payload_hash: str) -> str | None:
         owner = uuid.uuid4().hex
         with self.transaction(ns, True) as c:
@@ -227,6 +231,30 @@ class Repository:
                     "edges": [asdict(e) for e in snap.edges], "operations": operations, "versions": versions}
 
 
+class ReadSession:
+    """Optimistic read: the caller must validate both generations before publishing."""
+    def __init__(self, repo, ns):
+        self.repo, self.ns = repo, ns
+        self.timings_ms = {"database_open": 0.0, "database_work": 0.0}
+        started = time.perf_counter()
+        with repo.view(ns) as view:
+            self.timings_ms["database_open"] += (time.perf_counter() - started) * 1000
+            self.generation, self.policy_generation = view.generation, view.policy_generation
+
+    def __getattr__(self, name):
+        if name not in {"dense", "lexical", "temporal", "snapshot", "related", "coverage", "follow"}:
+            raise AttributeError(name)
+        def read(*args, **kwargs):
+            started = time.perf_counter()
+            with self.repo.view(self.ns) as view:
+                acquired = time.perf_counter()
+                self.timings_ms["database_open"] += (acquired - started) * 1000
+                result = getattr(view, name)(*args, **kwargs)
+                self.timings_ms["database_work"] += (time.perf_counter() - acquired) * 1000
+                return result
+        return read
+
+
 class Connection:
     def __init__(self, raw, pg):
         self.raw, self.pg = raw, pg
@@ -254,9 +282,46 @@ class View:
     def context(self, text: str, limit=60) -> Snapshot:
         ranked = self.lexical(text, limit)
         recent = [r[0] for r in self.c.execute(
-            "SELECT id FROM ee_objects WHERE ns=? AND active>0 AND kind NOT IN ('source','span','summary') "
+            "SELECT id FROM ee_objects WHERE ns=? AND active>0 AND kind NOT IN ('source','span','summary','episode') "
             "ORDER BY generation DESC,id LIMIT ?", (self.ns, limit)).fetchall()]
         return self.snapshot(set(ranked) | set(recent))
+
+    def follow(self, nodes: list[Node]) -> Snapshot:
+        """Follow explicit identity links, never join equal surface names speculatively."""
+        subjects = {n.value_id.casefold() for n in nodes if n.value_id}
+        rows = self._by_ids("SELECT id FROM ee_objects WHERE ns=? AND active>0 AND subject_key IN ({ids}) "
+                            "ORDER BY generation DESC,id LIMIT " + str(self.repo.config.graph_budget), subjects)
+        return self.snapshot({r[0] for r in rows[:self.repo.config.graph_budget]})
+
+    def coverage(self, query: str, limit: int) -> list[str]:
+        """Diversify lexical source candidates across sessions before within-session rank."""
+        candidates = self.lexical(query, min(self.repo.config.graph_budget, limit * 8))
+        broad = not candidates
+        if broad:
+            # A genuine "summarize our history" request may name no stored topic.
+            # Seed both ends of the history; semantic verification happens outside SQL.
+            cap = max(1, self.repo.config.graph_budget // 2)
+            candidates = {}
+            for order in ("ASC", "DESC"):
+                rows = self.c.execute("SELECT id FROM ee_objects WHERE ns=? AND active>0 AND kind='source' "
+                                      f"ORDER BY generation {order},id LIMIT ?", (self.ns, cap)).fetchall()
+                candidates.update({r[0]: 1.0 for r in rows})
+        snap = self.snapshot(set(candidates))
+        groups = {}
+        for source in snap.sources.values():
+            if not broad and not set(terms(query)).intersection(terms(source.content)):
+                continue
+            groups.setdefault(source.session_id, []).append(source)
+        for group in groups.values():
+            group.sort(key=lambda s: (s.generation, s.ordinal, s.id))
+        result = []
+        for index in range(max(map(len, groups.values()), default=0)):
+            for key in sorted(groups):
+                if index < len(groups[key]):
+                    result.append(groups[key][index].id)
+                    if len(result) >= limit:
+                        return result
+        return result
 
     def lexical(self, query: str, limit: int) -> dict[str, float]:
         query_terms = list(dict.fromkeys(terms(query)))[:128]

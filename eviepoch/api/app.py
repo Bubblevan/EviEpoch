@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hmac
 import os
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException
@@ -11,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..config import Settings
 from .audit import PayloadAuditMiddleware
+from ..observability.diagnostics import log_api_failure, request_context
 from ..domain import IdempotencyConflict, IngestBusy, InvalidExtraction
 from ..domain.requests import AddRequest, Message, SearchRequest
 from ..pipeline import MemoryPipeline
@@ -140,14 +142,48 @@ def create_app(config: Settings | None = None, memory=None) -> FastAPI:
     def add(body: AddBody, authorization: str | None = Header(default=None),
             x_api_key: str | None = Header(default=None)):
         authorize(authorization, x_api_key)
-        return memory.add(AddRequest(body.request_id, body.user_id, body.session_id,
-                                     [Message(m.role, m.content, m.timestamp) for m in body.messages]))
+        started = time.perf_counter()
+        input_chars = sum(len(message.content) for message in body.messages)
+        with request_context(operation="add", request_id=body.request_id,
+                             fingerprint_key=config.auth_token, message_count=len(body.messages),
+                             input_chars=input_chars):
+            try:
+                return memory.add(AddRequest(body.request_id, body.user_id, body.session_id,
+                                             [Message(m.role, m.content, m.timestamp) for m in body.messages]))
+            except (IngestBusy, ProviderUnavailable, InvalidExtraction) as exc:
+                log_api_failure(
+                    operation="add",
+                    error=exc,
+                    status_code=429 if isinstance(exc, IngestBusy) else 503,
+                    duration_ms=(time.perf_counter() - started) * 1000,
+                    request_id=body.request_id,
+                    fingerprint_key=config.auth_token,
+                    message_count=len(body.messages),
+                    input_chars=input_chars,
+                )
+                raise
 
     @app.post("/search")
     def search(body: SearchBody, authorization: str | None = Header(default=None),
                x_api_key: str | None = Header(default=None)):
         authorize(authorization, x_api_key)
-        return memory.search(SearchRequest(body.query, body.user_id, body.top_k, body.options))
+        started = time.perf_counter()
+        with request_context(operation="search", query_chars=len(body.query), top_k=body.top_k,
+                             options_count=len(body.options or [])):
+            try:
+                return memory.search(SearchRequest(body.query, body.user_id, body.top_k, body.options))
+            except (IngestBusy, ProviderUnavailable, InvalidExtraction) as exc:
+                log_api_failure(
+                    operation="search",
+                    error=exc,
+                    status_code=429 if isinstance(exc, IngestBusy) else 503,
+                    duration_ms=(time.perf_counter() - started) * 1000,
+                    fingerprint_key=config.auth_token,
+                    query_chars=len(body.query),
+                    top_k=body.top_k,
+                    options_count=len(body.options or []),
+                )
+                raise
 
     if config.workbench_enabled and config.profile != "b0":
         from pathlib import Path

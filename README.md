@@ -2,7 +2,7 @@
 
 面向 Agent Memory Challenge II 的长期文本记忆服务。Add 保存精确来源并同步发布记忆与治理变化；Search 结合时间状态、关系依赖和证据义务，返回来源可定位的原文，交由平台统一 Answer。
 
-开发模型按本次约定使用 DeepSeek；正式参赛配置强制校验 `gpt-4o-mini` 与 `text-embedding-v4`。当前是研究候选实现，尚未完成公网官方 Smoke、Full 或目标容量验收。
+开发模型按本次约定使用 DeepSeek；正式参赛配置强制校验 `gpt-4o-mini` 与 `text-embedding-v4`。当前是研究候选实现；运行环境见 [部署记录](DEPLOYMENT.md)，本轮修复与离线边界见 [离线验证](docs/OFFLINE_VALIDATION.md)。模型质量、正式成绩与目标容量分别验收。
 
 ## 代码结构
 
@@ -86,10 +86,16 @@ Add 在来源、索引、状态/治理与 request ledger 同一 generation 提�
 
 正文保留原始语言和文字。缺失来源时间时不补服务器日期；生成摘要/规划文本不会出现在 evidence content 中。数量、字符与 token 预算均限制输出。原文过长时可返回精确引用片段。options 只用于规划核验，不写入记忆。
 
+检索模型调用在数据库锁外执行，返回前校验记忆与治理 generation；并发变化超过有界重试时返回 503。原始叙述时间与传输时间分开保存；`order_by` 区分事件、首次提及与记录顺序。显式结构化更新按实体/关系 ID 和作用域组织版本，历史来源保留。
+
+episode 只作有来源的导航。global/list/order 查询增加跨会话覆盖并标记未覆盖部分；最终披露阶段只允许选中来源中的精确原文片段。披露判断仍依赖模型，离线合同测试不代表真实模型的隐私准确率。相关开关均见 `.env.example`。
+
 ## 验证与实验
 
 ```powershell
 .venv\Scripts\python.exe -m unittest discover -s tests
+.venv\Scripts\python.exe experiments\offline_validation.py
+.venv\Scripts\python.exe experiments\offline_concurrency.py
 .venv\Scripts\python.exe experiments\provider_smoke.py --deepseek
 .venv\Scripts\python.exe experiments\evaluate.py --deepseek --answer --arms full topk greedy hybrid
 ```
@@ -97,6 +103,8 @@ Add 在来源、索引、状态/治理与 request ledger 同一 generation 提�
 本地测试包含精确来源、时间/模态、作用域、变化/纠正、巩固、因果/规则、反例、遗忘重放、并发幂等、跨 user 隔离、AND/OR 选择器及上游迁移合同。PostgreSQL 集成测试需设置 `EPOCH_TEST_DATABASE_URL` 与 `EPOCH_TEST_ADMIN_DATABASE_URL`；测试库名必须以 `_test` 结尾，测试会清空该专用库。
 
 `evaluate.py` 只使用自建公开控制集。Full、Top-K、Greedy 可复用同次公开实验的抽取/计划/embedding；该缓存只存在于评测进程，API 无正文缓存。失败案例保留在分母中。热缓存时延不是容量测量；DeepSeek 本地 Answer/judge 是代理评测，不能标成官方 AML Overall。自然公开基准、隔离的封存测试、配对区间和全交互消融仍需扩展。
+
+`experiments/ablate.py --improvements` 在冻结抽取/计划、模型和证据预算下逐项关闭状态投影、全局覆盖、episode、披露；提示词变更后拒绝复用旧冻结产物。独立 selector 对照排除回退和披露阶段。返回片段时，来源召回率单独记录，不把任意片段冒充完整来源证明。
 
 冻结候选配置：
 

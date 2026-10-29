@@ -94,6 +94,9 @@ class Source:
 
     def render(self) -> str:
         mark = f"[{self.asserted_at}]" if self.asserted_at else ""
+        anchor = self.locator.get("temporal_anchor", {})
+        if anchor.get("kind") == "original_message" and anchor.get("time") != self.asserted_at:
+            mark += f"[original_message_time={anchor['time']}]"
         return f"{mark}[{self.role}] {self.content}"
 
 
@@ -155,9 +158,14 @@ class Node:
     confidence: float = 0.0  # Evidence-support index, not a calibrated probability.
     generation: int = 0
 
+    subject_id: str = ""
+    predicate_id: str = ""
+    value_id: str = ""
+
     @property
     def key(self) -> tuple[str, str, str]:
-        return (self.subject.casefold(), self.predicate.casefold(), self.scope.casefold())
+        return ((self.subject_id or self.subject).casefold(),
+                (self.predicate_id or self.predicate).casefold(), self.scope.casefold())
 
     def representation(self) -> str:
         return f"{self.kind}: {self.subject} {self.predicate} {self.value} [{self.scope}]"
@@ -203,6 +211,7 @@ class QueryPlan:
     obligations: list[Obligation] = field(default_factory=list)
     required_relations: list[str] = field(default_factory=list)
     actions: list[str] = field(default_factory=list)
+    order_by: str = "event"
 
 
 @dataclass

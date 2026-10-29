@@ -1,0 +1,44 @@
+{
+  "official_score": false,
+  "scope": "synthetic pipeline with simulated model delay; not HTTP/provider capacity",
+  "workers": 8,
+  "simulated_plan_ms": 100.0,
+  "peak_concurrent_plan_calls": 8,
+  "wall_ms": 112.39,
+  "results": [
+    {
+      "elapsed_ms": 108.83,
+      "hits": 1
+    },
+    {
+      "elapsed_ms": 109.91,
+      "hits": 1
+    },
+    {
+      "elapsed_ms": 110.29,
+      "hits": 1
+    },
+    {
+      "elapsed_ms": 109.75,
+      "hits": 1
+    },
+    {
+      "elapsed_ms": 110.17,
+      "hits": 1
+    },
+    {
+      "elapsed_ms": 109.05,
+      "hits": 1
+    },
+    {
+      "elapsed_ms": 110.07,
+      "hits": 1
+    },
+    {
+      "elapsed_ms": 107.4,
+      "hits": 1
+    }
+  ],
+  "network_calls": 0,
+  "passed": true
+}

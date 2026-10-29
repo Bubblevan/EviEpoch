@@ -9,7 +9,7 @@ from ..domain import Edge, Node, Snapshot, stable_id
 def reconcile(new: list[Node], edges: list[Edge], old: Snapshot, *, consolidate=True, reflect=True):
     by_key = defaultdict(list)
     for node in old.nodes.values():
-        if node.kind not in {"summary", "reflection"}:
+        if node.kind not in {"summary", "episode", "reflection"}:
             by_key[node.key].append(node)
     output = {n.id: n for n in new}
     relations = {e.id: e for e in edges}
@@ -20,13 +20,30 @@ def reconcile(new: list[Node], edges: list[Edge], old: Snapshot, *, consolidate=
         relations[eid] = Edge(eid, origin.id, target.id, kind, refs, "validated_attribute_comparison")
 
     for node in new:
+        if node.kind == "episode":
+            continue
         node.state = "hypothesis" if node.kind == "reflection" else "supported"
         node.confidence = 0.5
         for previous in by_key[node.key]:
+            same_value = (node.value_id or node.value).casefold() == (previous.value_id or previous.value).casefold()
             # Multi-valued properties and different modalities never imply a replacement.
             if node.modality != previous.modality or node.modality in {"planned", "hypothetical"}:
                 continue
-            if node.value.casefold() == previous.value.casefold():
+            if (node.subject_id and node.predicate_id and node.asserted_at and previous.asserted_at
+                    and node.asserted_at < previous.asserted_at and not same_value):
+                if previous.change_proposal == "explicit_replacement" and previous.change_verified:
+                    previous.change_targets = sorted(set(previous.change_targets + [node.id]))
+                    output[previous.id] = previous
+                    link(previous, node, "CORRECTS")
+                elif node.change_proposal == "explicit_replacement":
+                    link(node, previous, "CONTRADICTS")
+                continue
+            if (node.change_proposal == "explicit_replacement" and node.change_verified
+                    and node.subject_id and node.predicate_id and not same_value):
+                node.change_targets = sorted(set(node.change_targets + [previous.id]))
+                link(node, previous, "CORRECTS")
+                continue
+            if same_value:
                 link(node, previous, "SUPPORTS")
             elif node.cardinality == previous.cardinality == "single":
                 if node.change == "correction":
@@ -82,7 +99,8 @@ def reconcile(new: list[Node], edges: list[Edge], old: Snapshot, *, consolidate=
             summary = Node(stable_id("summary", key, [n.id for n in group]), "summary", group[0].subject,
                            group[0].predicate, "\n".join(n.value for n in group), source_ids, span_ids,
                            scope=group[0].scope, tier="scenario", state="supported",
-                           protected=any(n.protected for n in group), support_ids=[n.id for n in group])
+                           protected=any(n.protected for n in group), support_ids=[n.id for n in group],
+                           subject_id=group[0].subject_id, predicate_id=group[0].predicate_id)
             output[summary.id] = summary
             for node in group:
                 node.tier = "long_term"
