@@ -1,0 +1,1177 @@
+{
+  "official_score": false,
+  "status": "final_live_acceptance_pending_provider_credit",
+  "scope": "aggregate only; no private questions, sources, identities, answers or model I/O",
+  "controls": [
+    {
+      "name": "answer-controls-r1",
+      "dataset_hash": "5d5f109683c7f1631f3964bb1d5fcc8608e674a87002c50186a670bade301c93",
+      "summary": {
+        "searches": 21,
+        "complete_evidence_scored": 4,
+        "complete_evidence_unknown": 17,
+        "answers_scored": 21,
+        "complete_evidence_rate": 0.25,
+        "complete_source_coverage_rate": 0.8421052631578947,
+        "evidence_recall": 0.868421052631579,
+        "leakage_rate": 0.0,
+        "source_recall": 0.868421052631579,
+        "abstention_rate": 1.0,
+        "proxy_answer_accuracy": 0.9047619047619048,
+        "errors": 2,
+        "search_p95_seconds": 4.534907099994598
+      },
+      "acceptance": null,
+      "usage": {
+        "chat_calls": 157,
+        "embedding_calls": 62,
+        "input_tokens": 144135,
+        "output_tokens": 14543
+      },
+      "errors": [
+        {
+          "case": "governance-supersession",
+          "type": "InvalidExtraction",
+          "stage": null
+        }
+      ],
+      "recorded_summary": {
+        "searches": 21,
+        "complete_evidence_rate": 0.25,
+        "complete_source_coverage_rate": 0.9411764705882353,
+        "evidence_recall": 0.868421052631579,
+        "leakage_rate": 0.0,
+        "source_recall": 0.9705882352941176,
+        "abstention_rate": 1.0,
+        "proxy_answer_accuracy": 0.9047619047619048,
+        "errors": 2,
+        "search_p95_seconds": 4.534907099994598
+      }
+    },
+    {
+      "name": "answer-controls-r2",
+      "dataset_hash": "5d5f109683c7f1631f3964bb1d5fcc8608e674a87002c50186a670bade301c93",
+      "summary": {
+        "searches": 21,
+        "complete_evidence_scored": 4,
+        "complete_evidence_unknown": 17,
+        "answers_scored": 21,
+        "complete_evidence_rate": 0.5,
+        "complete_source_coverage_rate": 0.8947368421052632,
+        "evidence_recall": 0.8947368421052632,
+        "leakage_rate": 0.0,
+        "source_recall": 0.8947368421052632,
+        "abstention_rate": 1.0,
+        "proxy_answer_accuracy": 0.9047619047619048,
+        "errors": 2,
+        "search_p95_seconds": 5.101978999999119
+      },
+      "acceptance": null,
+      "usage": {
+        "chat_calls": 159,
+        "embedding_calls": 62,
+        "input_tokens": 147673,
+        "output_tokens": 14755
+      },
+      "errors": [
+        {
+          "case": "governance-supersession",
+          "type": "InvalidExtraction",
+          "stage": null
+        }
+      ],
+      "recorded_summary": {
+        "searches": 21,
+        "complete_evidence_rate": 0.5,
+        "complete_source_coverage_rate": 1.0,
+        "evidence_recall": 0.8947368421052632,
+        "leakage_rate": 0.0,
+        "source_recall": 1.0,
+        "abstention_rate": 1.0,
+        "proxy_answer_accuracy": 0.9047619047619048,
+        "errors": 2,
+        "search_p95_seconds": 5.101978999999119
+      }
+    },
+    {
+      "name": "answer-controls-r3",
+      "dataset_hash": "5d5f109683c7f1631f3964bb1d5fcc8608e674a87002c50186a670bade301c93",
+      "summary": {
+        "searches": 21,
+        "complete_evidence_scored": 15,
+        "complete_evidence_unknown": 6,
+        "answers_scored": 21,
+        "complete_evidence_rate": 1.0,
+        "complete_source_coverage_rate": 1.0,
+        "evidence_recall": 1.0,
+        "leakage_rate": 0.047619047619047616,
+        "source_recall": 1.0,
+        "abstention_rate": 1.0,
+        "proxy_answer_accuracy": 1.0,
+        "errors": 0,
+        "search_p95_seconds": 5.5093516999913845
+      },
+      "acceptance": null,
+      "usage": {
+        "chat_calls": 163,
+        "embedding_calls": 63,
+        "input_tokens": 156108,
+        "output_tokens": 14466
+      },
+      "errors": [],
+      "recorded_summary": {
+        "searches": 21,
+        "complete_evidence_rate": 1.0,
+        "complete_source_coverage_rate": 1.0,
+        "evidence_recall": 1.0,
+        "leakage_rate": 0.047619047619047616,
+        "source_recall": 1.0,
+        "abstention_rate": 1.0,
+        "proxy_answer_accuracy": 1.0,
+        "errors": 0,
+        "search_p95_seconds": 5.5093516999913845
+      }
+    },
+    {
+      "name": "answer-controls-r4",
+      "dataset_hash": "5d5f109683c7f1631f3964bb1d5fcc8608e674a87002c50186a670bade301c93",
+      "summary": {
+        "searches": 21,
+        "complete_evidence_scored": 14,
+        "complete_evidence_unknown": 7,
+        "answers_scored": 21,
+        "complete_evidence_rate": 0.7142857142857143,
+        "complete_source_coverage_rate": 0.7894736842105263,
+        "evidence_recall": 0.9122807017543859,
+        "leakage_rate": 0.0,
+        "source_recall": 0.9122807017543859,
+        "abstention_rate": 1.0,
+        "proxy_answer_accuracy": 0.8571428571428571,
+        "errors": 0,
+        "search_p95_seconds": 5.170477199979359
+      },
+      "acceptance": null,
+      "usage": {
+        "chat_calls": 162,
+        "embedding_calls": 63,
+        "input_tokens": 161271,
+        "output_tokens": 15597
+      },
+      "errors": [],
+      "recorded_summary": {
+        "searches": 21,
+        "complete_evidence_rate": 0.7142857142857143,
+        "complete_source_coverage_rate": 0.7894736842105263,
+        "evidence_recall": 0.9122807017543859,
+        "leakage_rate": 0.0,
+        "source_recall": 0.9122807017543859,
+        "abstention_rate": 1.0,
+        "proxy_answer_accuracy": 0.8571428571428571,
+        "errors": 0,
+        "search_p95_seconds": 5.170477199979359
+      }
+    },
+    {
+      "name": "answer-controls-r5",
+      "dataset_hash": "5d5f109683c7f1631f3964bb1d5fcc8608e674a87002c50186a670bade301c93",
+      "summary": {
+        "searches": 21,
+        "complete_evidence_scored": 11,
+        "complete_evidence_unknown": 10,
+        "answers_scored": 21,
+        "complete_evidence_rate": 0.8181818181818182,
+        "complete_source_coverage_rate": 0.8947368421052632,
+        "evidence_recall": 0.9473684210526315,
+        "leakage_rate": 0.0,
+        "source_recall": 0.9473684210526315,
+        "abstention_rate": 1.0,
+        "proxy_answer_accuracy": 0.9523809523809523,
+        "errors": 0,
+        "search_p95_seconds": 5.344041200005449
+      },
+      "acceptance": {
+        "passed": false,
+        "checks": 21,
+        "failures": [
+          {
+            "case": "reflection",
+            "id": "revised",
+            "reasons": [
+              "evidence"
+            ]
+          },
+          {
+            "case": "experience-data",
+            "id": "compare-experiments",
+            "reasons": [
+              "answer",
+              "evidence"
+            ]
+          }
+        ],
+        "evidence_unknown": 10,
+        "scope": "local self-authored controls; unknown evidence sufficiency is reported, not graded as complete"
+      },
+      "usage": {
+        "chat_calls": 162,
+        "embedding_calls": 63,
+        "input_tokens": 161967,
+        "output_tokens": 15712
+      },
+      "errors": [],
+      "recorded_summary": {
+        "searches": 21,
+        "complete_evidence_scored": 11,
+        "complete_evidence_unknown": 10,
+        "answers_scored": 21,
+        "complete_evidence_rate": 0.8181818181818182,
+        "complete_source_coverage_rate": 0.8947368421052632,
+        "evidence_recall": 0.9473684210526315,
+        "leakage_rate": 0.0,
+        "source_recall": 0.9473684210526315,
+        "abstention_rate": 1.0,
+        "proxy_answer_accuracy": 0.9523809523809523,
+        "errors": 0,
+        "search_p95_seconds": 5.344041200005449
+      }
+    },
+    {
+      "name": "answer-controls-r6",
+      "dataset_hash": "5d5f109683c7f1631f3964bb1d5fcc8608e674a87002c50186a670bade301c93",
+      "summary": {
+        "searches": 21,
+        "complete_evidence_scored": 18,
+        "complete_evidence_unknown": 3,
+        "answers_scored": 21,
+        "complete_evidence_rate": 0.9444444444444444,
+        "complete_source_coverage_rate": 0.9473684210526315,
+        "evidence_recall": 0.9736842105263158,
+        "leakage_rate": 0.0,
+        "source_recall": 0.9736842105263158,
+        "abstention_rate": 1.0,
+        "proxy_answer_accuracy": 0.9523809523809523,
+        "errors": 0,
+        "search_p95_seconds": 5.119638600008329
+      },
+      "acceptance": {
+        "passed": false,
+        "checks": 21,
+        "failures": [
+          {
+            "case": "experience-data",
+            "id": "compare-experiments",
+            "reasons": [
+              "answer",
+              "evidence"
+            ]
+          }
+        ],
+        "evidence_unknown": 3,
+        "scope": "local self-authored controls; unknown evidence sufficiency is reported, not graded as complete"
+      },
+      "usage": {
+        "chat_calls": 163,
+        "embedding_calls": 63,
+        "input_tokens": 163115,
+        "output_tokens": 15779
+      },
+      "errors": [],
+      "recorded_summary": {
+        "searches": 21,
+        "complete_evidence_scored": 18,
+        "complete_evidence_unknown": 3,
+        "answers_scored": 21,
+        "complete_evidence_rate": 0.9444444444444444,
+        "complete_source_coverage_rate": 0.9473684210526315,
+        "evidence_recall": 0.9736842105263158,
+        "leakage_rate": 0.0,
+        "source_recall": 0.9736842105263158,
+        "abstention_rate": 1.0,
+        "proxy_answer_accuracy": 0.9523809523809523,
+        "errors": 0,
+        "search_p95_seconds": 5.119638600008329
+      }
+    },
+    {
+      "name": "answer-controls-r7",
+      "dataset_hash": "5d5f109683c7f1631f3964bb1d5fcc8608e674a87002c50186a670bade301c93",
+      "summary": {
+        "searches": 21,
+        "complete_evidence_scored": 17,
+        "complete_evidence_unknown": 4,
+        "answers_scored": 21,
+        "complete_evidence_rate": 1.0,
+        "complete_source_coverage_rate": 1.0,
+        "evidence_recall": 1.0,
+        "leakage_rate": 0.0,
+        "source_recall": 1.0,
+        "abstention_rate": 1.0,
+        "proxy_answer_accuracy": 1.0,
+        "errors": 0,
+        "search_p95_seconds": 5.274650699982885
+      },
+      "acceptance": {
+        "passed": true,
+        "checks": 21,
+        "failures": [],
+        "evidence_unknown": 4,
+        "scope": "local self-authored controls; unknown evidence sufficiency is reported, not graded as complete"
+      },
+      "usage": {
+        "chat_calls": 163,
+        "embedding_calls": 63,
+        "input_tokens": 158168,
+        "output_tokens": 15044
+      },
+      "errors": [],
+      "recorded_summary": {
+        "searches": 21,
+        "complete_evidence_scored": 17,
+        "complete_evidence_unknown": 4,
+        "answers_scored": 21,
+        "complete_evidence_rate": 1.0,
+        "complete_source_coverage_rate": 1.0,
+        "evidence_recall": 1.0,
+        "leakage_rate": 0.0,
+        "source_recall": 1.0,
+        "abstention_rate": 1.0,
+        "proxy_answer_accuracy": 1.0,
+        "errors": 0,
+        "search_p95_seconds": 5.274650699982885
+      }
+    },
+    {
+      "name": "answer-controls-r8",
+      "dataset_hash": "5d5f109683c7f1631f3964bb1d5fcc8608e674a87002c50186a670bade301c93",
+      "summary": {
+        "searches": 21,
+        "complete_evidence_scored": 19,
+        "complete_evidence_unknown": 2,
+        "answers_scored": 21,
+        "complete_evidence_rate": 0.3157894736842105,
+        "complete_source_coverage_rate": 0.3157894736842105,
+        "evidence_recall": 0.3157894736842105,
+        "leakage_rate": 0.0,
+        "source_recall": 0.3157894736842105,
+        "abstention_rate": 0.0,
+        "proxy_answer_accuracy": 0.2857142857142857,
+        "errors": 15,
+        "search_p95_seconds": 3.9314317000098526
+      },
+      "acceptance": {
+        "passed": false,
+        "checks": 21,
+        "failures": [
+          {
+            "case": "forget",
+            "id": "private",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "abstention"
+            ]
+          },
+          {
+            "case": "forget",
+            "id": "unrelated",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          },
+          {
+            "case": "unsupported",
+            "id": "options",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "abstention"
+            ]
+          },
+          {
+            "case": "reflection",
+            "id": "revised",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          },
+          {
+            "case": "temporal-interval",
+            "id": "elapsed-days",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          },
+          {
+            "case": "long-history",
+            "id": "project-arc",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          },
+          {
+            "case": "streaming-online",
+            "id": "immediate",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          },
+          {
+            "case": "streaming-online",
+            "id": "latest",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          },
+          {
+            "case": "streaming-transfer",
+            "id": "new-task-transfer",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          },
+          {
+            "case": "experience-data",
+            "id": "compare-experiments",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          },
+          {
+            "case": "relative-date-interval",
+            "id": "relative-days",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          },
+          {
+            "case": "governance-supersession",
+            "id": "current",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          },
+          {
+            "case": "governance-supersession",
+            "id": "history",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          },
+          {
+            "case": "privacy-minimal",
+            "id": "dietary-restriction",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          },
+          {
+            "case": "rule-independent-condition",
+            "id": "apply-exception",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          }
+        ],
+        "evidence_unknown": 2,
+        "scope": "local self-authored controls; unknown evidence sufficiency is reported, not graded as complete"
+      },
+      "usage": {
+        "chat_calls": 57,
+        "embedding_calls": 24,
+        "input_tokens": 52199,
+        "output_tokens": 4768
+      },
+      "errors": [
+        {
+          "case": "forget",
+          "type": "ProviderUnavailable",
+          "stage": "disclosure"
+        },
+        {
+          "case": "unsupported",
+          "type": "ProviderUnavailable",
+          "stage": "extract"
+        },
+        {
+          "case": "reflection",
+          "type": "ProviderUnavailable",
+          "stage": "extract"
+        },
+        {
+          "case": "temporal-interval",
+          "type": "ProviderUnavailable",
+          "stage": "extract"
+        },
+        {
+          "case": "long-history",
+          "type": "ProviderUnavailable",
+          "stage": "extract"
+        },
+        {
+          "case": "streaming-online",
+          "type": "ProviderUnavailable",
+          "stage": "extract"
+        },
+        {
+          "case": "streaming-transfer",
+          "type": "ProviderUnavailable",
+          "stage": "query_plan"
+        },
+        {
+          "case": "experience-data",
+          "type": "ProviderUnavailable",
+          "stage": "extract"
+        },
+        {
+          "case": "relative-date-interval",
+          "type": "ProviderUnavailable",
+          "stage": "extract"
+        },
+        {
+          "case": "governance-supersession",
+          "type": "ProviderUnavailable",
+          "stage": "extract"
+        },
+        {
+          "case": "privacy-minimal",
+          "type": "ProviderUnavailable",
+          "stage": "extract"
+        },
+        {
+          "case": "rule-independent-condition",
+          "type": "ProviderUnavailable",
+          "stage": "extract"
+        }
+      ],
+      "recorded_summary": {
+        "searches": 21,
+        "complete_evidence_scored": 19,
+        "complete_evidence_unknown": 2,
+        "answers_scored": 21,
+        "complete_evidence_rate": 0.3157894736842105,
+        "complete_source_coverage_rate": 1.0,
+        "evidence_recall": 0.3157894736842105,
+        "leakage_rate": 0.0,
+        "source_recall": 1.0,
+        "abstention_rate": 0.0,
+        "proxy_answer_accuracy": 0.2857142857142857,
+        "errors": 15,
+        "search_p95_seconds": 3.9314317000098526
+      }
+    },
+    {
+      "name": "context-controls-r1",
+      "dataset_hash": "aea972f21790d34680f2045b3a120fa3e845cdf37b3b4c55f7aacd581478f16f",
+      "summary": {
+        "searches": 9,
+        "complete_evidence_scored": 8,
+        "complete_evidence_unknown": 1,
+        "answers_scored": 9,
+        "complete_evidence_rate": 0.75,
+        "complete_source_coverage_rate": 0.75,
+        "evidence_recall": 0.75,
+        "leakage_rate": 0.0,
+        "source_recall": 0.75,
+        "abstention_rate": null,
+        "proxy_answer_accuracy": 0.7777777777777778,
+        "errors": 2,
+        "search_p95_seconds": 4.4963418999977876
+      },
+      "acceptance": null,
+      "usage": {
+        "chat_calls": 56,
+        "embedding_calls": 17,
+        "input_tokens": 50408,
+        "output_tokens": 5772
+      },
+      "errors": [
+        {
+          "case": "corrected-history",
+          "type": "InvalidExtraction",
+          "stage": null
+        }
+      ],
+      "recorded_summary": {
+        "searches": 9,
+        "complete_evidence_rate": 0.75,
+        "complete_source_coverage_rate": 1.0,
+        "evidence_recall": 0.75,
+        "leakage_rate": 0.0,
+        "source_recall": 1.0,
+        "abstention_rate": null,
+        "proxy_answer_accuracy": 0.7777777777777778,
+        "errors": 2,
+        "search_p95_seconds": 4.4963418999977876
+      }
+    },
+    {
+      "name": "context-controls-r2",
+      "dataset_hash": "aea972f21790d34680f2045b3a120fa3e845cdf37b3b4c55f7aacd581478f16f",
+      "summary": {
+        "searches": 9,
+        "complete_evidence_scored": 8,
+        "complete_evidence_unknown": 1,
+        "answers_scored": 9,
+        "complete_evidence_rate": 1.0,
+        "complete_source_coverage_rate": 1.0,
+        "evidence_recall": 1.0,
+        "leakage_rate": 0.0,
+        "source_recall": 1.0,
+        "abstention_rate": null,
+        "proxy_answer_accuracy": 1.0,
+        "errors": 0,
+        "search_p95_seconds": 4.8308636999863666
+      },
+      "acceptance": null,
+      "usage": {
+        "chat_calls": 61,
+        "embedding_calls": 18,
+        "input_tokens": 55516,
+        "output_tokens": 6039
+      },
+      "errors": [],
+      "recorded_summary": {
+        "searches": 9,
+        "complete_evidence_rate": 1.0,
+        "complete_source_coverage_rate": 1.0,
+        "evidence_recall": 1.0,
+        "leakage_rate": 0.0,
+        "source_recall": 1.0,
+        "abstention_rate": null,
+        "proxy_answer_accuracy": 1.0,
+        "errors": 0,
+        "search_p95_seconds": 4.8308636999863666
+      }
+    },
+    {
+      "name": "context-controls-r3",
+      "dataset_hash": "aea972f21790d34680f2045b3a120fa3e845cdf37b3b4c55f7aacd581478f16f",
+      "summary": {
+        "searches": 9,
+        "complete_evidence_scored": 8,
+        "complete_evidence_unknown": 1,
+        "answers_scored": 9,
+        "complete_evidence_rate": 0.875,
+        "complete_source_coverage_rate": 0.875,
+        "evidence_recall": 0.9375,
+        "leakage_rate": 0.0,
+        "source_recall": 0.9375,
+        "abstention_rate": null,
+        "proxy_answer_accuracy": 0.7777777777777778,
+        "errors": 0,
+        "search_p95_seconds": 4.82679009999265
+      },
+      "acceptance": null,
+      "usage": {
+        "chat_calls": 61,
+        "embedding_calls": 18,
+        "input_tokens": 58018,
+        "output_tokens": 6435
+      },
+      "errors": [],
+      "recorded_summary": {
+        "searches": 9,
+        "complete_evidence_rate": 0.875,
+        "complete_source_coverage_rate": 0.875,
+        "evidence_recall": 0.9375,
+        "leakage_rate": 0.0,
+        "source_recall": 0.9375,
+        "abstention_rate": null,
+        "proxy_answer_accuracy": 0.7777777777777778,
+        "errors": 0,
+        "search_p95_seconds": 4.82679009999265
+      }
+    },
+    {
+      "name": "context-controls-r4",
+      "dataset_hash": "aea972f21790d34680f2045b3a120fa3e845cdf37b3b4c55f7aacd581478f16f",
+      "summary": {
+        "searches": 9,
+        "complete_evidence_scored": 8,
+        "complete_evidence_unknown": 1,
+        "answers_scored": 9,
+        "complete_evidence_rate": 1.0,
+        "complete_source_coverage_rate": 1.0,
+        "evidence_recall": 1.0,
+        "leakage_rate": 0.0,
+        "source_recall": 1.0,
+        "abstention_rate": null,
+        "proxy_answer_accuracy": 1.0,
+        "errors": 0,
+        "search_p95_seconds": 4.6798595000000205
+      },
+      "acceptance": {
+        "passed": true,
+        "checks": 9,
+        "failures": [],
+        "evidence_unknown": 1,
+        "scope": "local self-authored controls; unknown evidence sufficiency is reported, not graded as complete"
+      },
+      "usage": {
+        "chat_calls": 61,
+        "embedding_calls": 18,
+        "input_tokens": 57793,
+        "output_tokens": 6414
+      },
+      "errors": [],
+      "recorded_summary": {
+        "searches": 9,
+        "complete_evidence_scored": 8,
+        "complete_evidence_unknown": 1,
+        "answers_scored": 9,
+        "complete_evidence_rate": 1.0,
+        "complete_source_coverage_rate": 1.0,
+        "evidence_recall": 1.0,
+        "leakage_rate": 0.0,
+        "source_recall": 1.0,
+        "abstention_rate": null,
+        "proxy_answer_accuracy": 1.0,
+        "errors": 0,
+        "search_p95_seconds": 4.6798595000000205
+      }
+    },
+    {
+      "name": "context-controls-r5",
+      "dataset_hash": "aea972f21790d34680f2045b3a120fa3e845cdf37b3b4c55f7aacd581478f16f",
+      "summary": {
+        "searches": 9,
+        "complete_evidence_scored": 8,
+        "complete_evidence_unknown": 1,
+        "answers_scored": 9,
+        "complete_evidence_rate": 1.0,
+        "complete_source_coverage_rate": 1.0,
+        "evidence_recall": 1.0,
+        "leakage_rate": 0.0,
+        "source_recall": 1.0,
+        "abstention_rate": null,
+        "proxy_answer_accuracy": 1.0,
+        "errors": 0,
+        "search_p95_seconds": 5.767464000004111
+      },
+      "acceptance": {
+        "passed": true,
+        "checks": 9,
+        "failures": [],
+        "evidence_unknown": 1,
+        "scope": "local self-authored controls; unknown evidence sufficiency is reported, not graded as complete"
+      },
+      "usage": {
+        "chat_calls": 62,
+        "embedding_calls": 18,
+        "input_tokens": 60061,
+        "output_tokens": 6597
+      },
+      "errors": [],
+      "recorded_summary": {
+        "searches": 9,
+        "complete_evidence_scored": 8,
+        "complete_evidence_unknown": 1,
+        "answers_scored": 9,
+        "complete_evidence_rate": 1.0,
+        "complete_source_coverage_rate": 1.0,
+        "evidence_recall": 1.0,
+        "leakage_rate": 0.0,
+        "source_recall": 1.0,
+        "abstention_rate": null,
+        "proxy_answer_accuracy": 1.0,
+        "errors": 0,
+        "search_p95_seconds": 5.767464000004111
+      }
+    },
+    {
+      "name": "context-controls-r6",
+      "dataset_hash": "aea972f21790d34680f2045b3a120fa3e845cdf37b3b4c55f7aacd581478f16f",
+      "summary": {
+        "searches": 9,
+        "complete_evidence_scored": 8,
+        "complete_evidence_unknown": 1,
+        "answers_scored": 9,
+        "complete_evidence_rate": 0.875,
+        "complete_source_coverage_rate": 0.875,
+        "evidence_recall": 0.9583333333333334,
+        "leakage_rate": 0.0,
+        "source_recall": 0.9583333333333334,
+        "abstention_rate": null,
+        "proxy_answer_accuracy": 1.0,
+        "errors": 0,
+        "search_p95_seconds": 5.002120100019965
+      },
+      "acceptance": {
+        "passed": false,
+        "checks": 9,
+        "failures": [
+          {
+            "case": "independent-rule-gate",
+            "id": "ready",
+            "reasons": [
+              "evidence"
+            ]
+          }
+        ],
+        "evidence_unknown": 1,
+        "scope": "local self-authored controls; unknown evidence sufficiency is reported, not graded as complete"
+      },
+      "usage": {
+        "chat_calls": 61,
+        "embedding_calls": 18,
+        "input_tokens": 57729,
+        "output_tokens": 6072
+      },
+      "errors": [],
+      "recorded_summary": {
+        "searches": 9,
+        "complete_evidence_scored": 8,
+        "complete_evidence_unknown": 1,
+        "answers_scored": 9,
+        "complete_evidence_rate": 0.875,
+        "complete_source_coverage_rate": 0.875,
+        "evidence_recall": 0.9583333333333334,
+        "leakage_rate": 0.0,
+        "source_recall": 0.9583333333333334,
+        "abstention_rate": null,
+        "proxy_answer_accuracy": 1.0,
+        "errors": 0,
+        "search_p95_seconds": 5.002120100019965
+      }
+    },
+    {
+      "name": "context-controls-r7",
+      "dataset_hash": "ea2cf73e50db0e8f4e1dc6ee6d7585166f1213fa4f1b5374139336d845ccf6c0",
+      "summary": {
+        "searches": 9,
+        "complete_evidence_scored": 8,
+        "complete_evidence_unknown": 1,
+        "answers_scored": 9,
+        "complete_evidence_rate": 0.625,
+        "complete_source_coverage_rate": 0.625,
+        "evidence_recall": 0.625,
+        "leakage_rate": 0.0,
+        "source_recall": 0.625,
+        "abstention_rate": null,
+        "proxy_answer_accuracy": 0.5555555555555556,
+        "errors": 4,
+        "search_p95_seconds": 5.133699199999683
+      },
+      "acceptance": {
+        "passed": false,
+        "checks": 9,
+        "failures": [
+          {
+            "case": "corrected-history",
+            "id": "current",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          },
+          {
+            "case": "corrected-history",
+            "id": "history",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          },
+          {
+            "case": "attribute-policy-boundary",
+            "id": "public",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed",
+              "evidence"
+            ]
+          },
+          {
+            "case": "attribute-policy-boundary",
+            "id": "unknown",
+            "reasons": [
+              "error",
+              "answer",
+              "privacy_unverified_or_failed"
+            ]
+          }
+        ],
+        "evidence_unknown": 1,
+        "scope": "local self-authored controls; unknown evidence sufficiency is reported, not graded as complete"
+      },
+      "usage": {
+        "chat_calls": 39,
+        "embedding_calls": 14,
+        "input_tokens": 42230,
+        "output_tokens": 5164
+      },
+      "errors": [
+        {
+          "case": "corrected-history",
+          "type": "ProviderUnavailable",
+          "stage": "disclosure"
+        },
+        {
+          "case": "attribute-policy-boundary",
+          "type": "ProviderUnavailable",
+          "stage": "extract"
+        }
+      ],
+      "recorded_summary": {
+        "searches": 9,
+        "complete_evidence_scored": 8,
+        "complete_evidence_unknown": 1,
+        "answers_scored": 9,
+        "complete_evidence_rate": 0.625,
+        "complete_source_coverage_rate": 1.0,
+        "evidence_recall": 0.625,
+        "leakage_rate": 0.0,
+        "source_recall": 1.0,
+        "abstention_rate": null,
+        "proxy_answer_accuracy": 0.5555555555555556,
+        "errors": 4,
+        "search_p95_seconds": 5.133699199999683
+      }
+    }
+  ],
+  "replays": [
+    {
+      "name": "replay-r5",
+      "counts": {
+        "/add_200": 134,
+        "/search_200": 51
+      },
+      "usage": {
+        "chat_calls": 184,
+        "embedding_calls": 53,
+        "input_tokens": 1410047,
+        "output_tokens": 28504,
+        "frozen_add": {
+          "chat": 145,
+          "embedding_texts": 3403
+        }
+      },
+      "add_mode": "frozen r2 extraction and vectors",
+      "search_mode": "real DeepSeek",
+      "credit_interrupted": false
+    },
+    {
+      "name": "replay-r6",
+      "counts": {
+        "/add_200": 134,
+        "/search_200": 48,
+        "/search_503": 3
+      },
+      "usage": {
+        "chat_calls": 187,
+        "embedding_calls": 53,
+        "input_tokens": 1405696,
+        "output_tokens": 37923,
+        "frozen_add": {
+          "chat": 145,
+          "embedding_texts": 3403
+        }
+      },
+      "add_mode": "frozen r2 extraction and vectors",
+      "search_mode": "real DeepSeek",
+      "credit_interrupted": false
+    },
+    {
+      "name": "replay-r7",
+      "counts": {
+        "/add_200": 134,
+        "/search_200": 51
+      },
+      "usage": {
+        "chat_calls": 183,
+        "embedding_calls": 53,
+        "input_tokens": 1355649,
+        "output_tokens": 26694,
+        "frozen_add": {
+          "chat": 145,
+          "embedding_texts": 3403
+        }
+      },
+      "add_mode": "frozen r2 extraction and vectors",
+      "search_mode": "real DeepSeek",
+      "credit_interrupted": false
+    },
+    {
+      "name": "replay-r8",
+      "counts": {
+        "/add_200": 134,
+        "/search_200": 48,
+        "/search_503": 3
+      },
+      "usage": {
+        "chat_calls": 187,
+        "embedding_calls": 53,
+        "input_tokens": 1469342,
+        "output_tokens": 30596,
+        "frozen_add": {
+          "chat": 145,
+          "embedding_texts": 3403
+        }
+      },
+      "add_mode": "frozen r2 extraction and vectors",
+      "search_mode": "real DeepSeek",
+      "credit_interrupted": false
+    },
+    {
+      "name": "replay-r9",
+      "counts": {
+        "/add_200": 134,
+        "/search_200": 50,
+        "/search_503": 1
+      },
+      "usage": {
+        "chat_calls": 187,
+        "embedding_calls": 53,
+        "input_tokens": 1443070,
+        "output_tokens": 29443,
+        "frozen_add": {
+          "chat": 145,
+          "embedding_texts": 3403
+        }
+      },
+      "add_mode": "frozen r2 extraction and vectors",
+      "search_mode": "real DeepSeek",
+      "credit_interrupted": false
+    },
+    {
+      "name": "replay-r11",
+      "counts": {
+        "/add_200": 134,
+        "/search_200": 50,
+        "/search_503": 1
+      },
+      "usage": {
+        "chat_calls": 185,
+        "embedding_calls": 53,
+        "input_tokens": 1482516,
+        "output_tokens": 31542,
+        "frozen_add": {
+          "chat": 145,
+          "embedding_texts": 3403
+        }
+      },
+      "add_mode": "frozen r2 extraction and vectors",
+      "search_mode": "real DeepSeek",
+      "credit_interrupted": false
+    },
+    {
+      "name": "replay-r12",
+      "counts": {
+        "/add_200": 134,
+        "/search_200": 51
+      },
+      "usage": {
+        "chat_calls": 186,
+        "embedding_calls": 53,
+        "input_tokens": 1435481,
+        "output_tokens": 32307,
+        "frozen_add": {
+          "chat": 145,
+          "embedding_texts": 3403
+        }
+      },
+      "add_mode": "frozen r2 extraction and vectors",
+      "search_mode": "real DeepSeek",
+      "credit_interrupted": false
+    },
+    {
+      "name": "replay-r13",
+      "counts": {
+        "/add_200": 134,
+        "/search_200": 45,
+        "/search_503": 6
+      },
+      "usage": {
+        "chat_calls": 165,
+        "embedding_calls": 47,
+        "input_tokens": 910997,
+        "output_tokens": 23719,
+        "frozen_add": {
+          "chat": 145,
+          "embedding_texts": 3403
+        }
+      },
+      "add_mode": "frozen r2 extraction and vectors",
+      "search_mode": "real DeepSeek",
+      "credit_interrupted": true
+    }
+  ],
+  "last_complete_boundary_check": {
+    "official_score": false,
+    "scope": "exact-byte namespace, temporal generation and excerpt packing integrity only",
+    "counts": {
+      "searches": 51,
+      "evidence_items": 260,
+      "bundles": 0,
+      "exact_source_or_span": 260,
+      "correct_namespace_and_generation": 260
+    },
+    "issues": [],
+    "passed": true
+  },
+  "credit_error": {
+    "http_status": 402,
+    "message": "Insufficient Balance"
+  },
+  "new_fixture_oracle_correction": "Current update explicitly carries forward approval and deadline; policy plus update is an additional sufficient source alternative. Answer reference unchanged.",
+  "metrics_revision": "Provider failures contribute zero to declared source coverage and recall. Recorded summaries retained; unknown actual evidence sufficiency stays unknown.",
+  "final_candidate_partial_boundary_check": {
+    "counts": {
+      "searches": 51,
+      "evidence_items": 200,
+      "bundles": 0,
+      "exact_source_or_span": 200,
+      "correct_namespace_and_generation": 200
+    },
+    "http_failures": 6,
+    "other_issues": 0,
+    "passed": false
+  },
+  "offline_tests": 272
+}

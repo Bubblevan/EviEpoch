@@ -1,0 +1,900 @@
+{
+  "name": "eviepoch-public-controls-v3",
+  "license": "CC0-1.0",
+  "origin": "Self-authored development controls; no official/private benchmark content",
+  "purpose": "Frozen self-authored CC0 development controls for C1/F1/G4/I1/I2/D2/H2/G2; not an official score or private benchmark.",
+  "cases": [
+    {
+      "id": "address",
+      "split": "dev",
+      "capabilities": [
+        "A",
+        "C",
+        "D"
+      ],
+      "adds": [
+        {
+          "id": "old",
+          "messages": [
+            {
+              "role": "user",
+              "content": "In January 2022 I lived in Kyoto.",
+              "timestamp": 1642204800000
+            }
+          ]
+        },
+        {
+          "id": "new",
+          "messages": [
+            {
+              "role": "user",
+              "content": "In June 2024 I moved to Osaka. My current home is Osaka.",
+              "timestamp": 1718409600000
+            }
+          ]
+        },
+        {
+          "id": "plan",
+          "messages": [
+            {
+              "role": "user",
+              "content": "I plan to move to Tokyo in 2028. This is only a future plan.",
+              "timestamp": 1718496000000
+            }
+          ]
+        }
+      ],
+      "searches": [
+        {
+          "id": "current",
+          "query": "Where do I currently live?",
+          "top_k": 3,
+          "evidence_alternatives": [
+            [
+              "new:0"
+            ]
+          ],
+          "forbidden_sources": [
+            "plan:0"
+          ],
+          "reference": "Osaka"
+        },
+        {
+          "id": "historical",
+          "query": "Where did I live in January 2022?",
+          "top_k": 3,
+          "evidence_alternatives": [
+            [
+              "old:0"
+            ]
+          ],
+          "forbidden_sources": [
+            "plan:0"
+          ],
+          "reference": "Kyoto"
+        }
+      ]
+    },
+    {
+      "id": "ordering",
+      "split": "dev",
+      "capabilities": [
+        "B",
+        "C"
+      ],
+      "adds": [
+        {
+          "id": "job",
+          "messages": [
+            {
+              "role": "user",
+              "content": "I started at Arbor Labs on 12 March 2023.",
+              "timestamp": 1678665600000
+            }
+          ]
+        },
+        {
+          "id": "move",
+          "messages": [
+            {
+              "role": "user",
+              "content": "I moved to Bristol on 9 September 2023.",
+              "timestamp": 1694217600000
+            }
+          ]
+        }
+      ],
+      "searches": [
+        {
+          "id": "order",
+          "query": "Did I start at Arbor Labs before or after I moved to Bristol?",
+          "top_k": 4,
+          "evidence_alternatives": [
+            [
+              "job:0",
+              "move:0"
+            ]
+          ],
+          "reference": "Before. The job began on 12 March 2023; the move was on 9 September 2023."
+        }
+      ]
+    },
+    {
+      "id": "cause",
+      "split": "dev",
+      "capabilities": [
+        "B",
+        "G"
+      ],
+      "adds": [
+        {
+          "id": "decision",
+          "messages": [
+            {
+              "role": "user",
+              "content": "The certificate rotation disabled our legacy trust anchor."
+            }
+          ]
+        },
+        {
+          "id": "failure",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Invoice delivery failed because the legacy trust anchor was disabled by the certificate rotation."
+            }
+          ]
+        }
+      ],
+      "searches": [
+        {
+          "id": "why",
+          "query": "Why did invoice delivery fail, and which earlier decision caused it?",
+          "top_k": 4,
+          "evidence_alternatives": [
+            [
+              "decision:0",
+              "failure:0"
+            ]
+          ],
+          "reference": "Certificate rotation disabled the legacy trust anchor, causing invoice delivery failure."
+        }
+      ]
+    },
+    {
+      "id": "procedure",
+      "split": "dev",
+      "capabilities": [
+        "B",
+        "G"
+      ],
+      "adds": [
+        {
+          "id": "rule",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Release policy: deployment requires an approval from the on-call lead."
+            }
+          ]
+        },
+        {
+          "id": "exception",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Exception to the deployment approval policy: an active emergency incident allows deployment without prior approval, followed by an audit."
+            }
+          ]
+        },
+        {
+          "id": "state",
+          "messages": [
+            {
+              "role": "user",
+              "content": "The current deployment is responding to an active emergency incident. No prior approval has been received."
+            }
+          ]
+        }
+      ],
+      "searches": [
+        {
+          "id": "apply",
+          "query": "Under the release policy, may the current deployment proceed without prior approval, and what is required afterward?",
+          "top_k": 6,
+          "evidence_alternatives": [
+            [
+              "rule:0",
+              "exception:0",
+              "state:0"
+            ]
+          ],
+          "reference": "Yes, because this is an active emergency incident. An audit must follow."
+        }
+      ]
+    },
+    {
+      "id": "care",
+      "split": "dev",
+      "capabilities": [
+        "A",
+        "E"
+      ],
+      "adds": [
+        {
+          "id": "allergy",
+          "messages": [
+            {
+              "role": "user",
+              "content": "我对花生严重过敏，任何场景都不能吃花生。"
+            }
+          ]
+        },
+        {
+          "id": "work",
+          "messages": [
+            {
+              "role": "user",
+              "content": "工作日午餐我偏好素食；周末没有这个偏好限制。"
+            }
+          ]
+        }
+      ],
+      "searches": [
+        {
+          "id": "meal",
+          "query": "安排工作日午餐时，需要遵守我的哪些饮食要求？",
+          "top_k": 4,
+          "evidence_alternatives": [
+            [
+              "allergy:0",
+              "work:0"
+            ]
+          ],
+          "reference": "不能含花生，因为严重过敏；工作日午餐偏好素食。"
+        }
+      ]
+    },
+    {
+      "id": "forget",
+      "split": "dev",
+      "capabilities": [
+        "D",
+        "H"
+      ],
+      "adds": [
+        {
+          "id": "secret",
+          "messages": [
+            {
+              "role": "user",
+              "content": "My old street address was 17 Cedar Lane."
+            }
+          ]
+        },
+        {
+          "id": "hobby",
+          "messages": [
+            {
+              "role": "user",
+              "content": "My favourite hobby is pottery."
+            }
+          ]
+        },
+        {
+          "id": "delete",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Please permanently erase my old street address, including 17 Cedar Lane, and all derived memories of that address."
+            }
+          ]
+        }
+      ],
+      "searches": [
+        {
+          "id": "private",
+          "query": "What was my old street address?",
+          "top_k": 4,
+          "evidence_alternatives": [],
+          "forbidden_text": [
+            "Cedar",
+            "17"
+          ],
+          "must_abstain": true,
+          "reference": "INSUFFICIENT_EVIDENCE"
+        },
+        {
+          "id": "unrelated",
+          "query": "What is my favourite hobby?",
+          "top_k": 3,
+          "evidence_alternatives": [
+            [
+              "hobby:0"
+            ]
+          ],
+          "reference": "Pottery"
+        }
+      ]
+    },
+    {
+      "id": "unsupported",
+      "split": "dev",
+      "capabilities": [
+        "H"
+      ],
+      "adds": [
+        {
+          "id": "book",
+          "messages": [
+            {
+              "role": "user",
+              "content": "I finished reading The Left Hand of Darkness."
+            }
+          ]
+        }
+      ],
+      "searches": [
+        {
+          "id": "options",
+          "query": "Which of these is my bank account number?",
+          "options": [
+            "A. 123456",
+            "B. 654321"
+          ],
+          "top_k": 3,
+          "evidence_alternatives": [],
+          "must_abstain": true,
+          "reference": "INSUFFICIENT_EVIDENCE"
+        }
+      ]
+    },
+    {
+      "id": "reflection",
+      "split": "dev",
+      "capabilities": [
+        "D",
+        "H"
+      ],
+      "adds": [
+        {
+          "id": "lesson",
+          "messages": [
+            {
+              "role": "user",
+              "content": "My current lesson is that strategy A always fails in staging."
+            }
+          ]
+        },
+        {
+          "id": "counterexample",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Strategy A succeeded in staging today. This counterexample means my earlier claim that it always fails was too strong."
+            }
+          ]
+        }
+      ],
+      "searches": [
+        {
+          "id": "revised",
+          "query": "Does the evidence support my earlier lesson that strategy A always fails in staging?",
+          "top_k": 4,
+          "evidence_alternatives": [
+            [
+              "lesson:0",
+              "counterexample:0"
+            ]
+          ],
+          "reference": "No. The later staging success is a counterexample to the universal claim."
+        }
+      ]
+    },
+    {
+      "id": "temporal-interval",
+      "split": "dev",
+      "capabilities": [
+        "C",
+        "C1"
+      ],
+      "adds": [
+        {
+          "id": "first",
+          "messages": [
+            {
+              "role": "user",
+              "content": "The first field review took place on 3 February 2025.",
+              "timestamp": 1738540800000
+            }
+          ]
+        },
+        {
+          "id": "followup",
+          "messages": [
+            {
+              "role": "user",
+              "content": "The follow-up field review took place on 19 February 2025.",
+              "timestamp": 1739923200000
+            }
+          ]
+        }
+      ],
+      "searches": [
+        {
+          "id": "elapsed-days",
+          "query": "How many days elapsed between the first and follow-up field reviews?",
+          "top_k": 4,
+          "evidence_alternatives": [
+            [
+              "first:0",
+              "followup:0"
+            ]
+          ],
+          "reference": "16 days elapsed, from 3 February 2025 to 19 February 2025."
+        }
+      ]
+    },
+    {
+      "id": "long-history",
+      "split": "dev",
+      "capabilities": [
+        "F",
+        "F1"
+      ],
+      "adds": [
+        {
+          "id": "goal",
+          "session_id": "planning",
+          "messages": [
+            {
+              "role": "user",
+              "content": "At the start, Project Lumen aimed to build an offline medicine catalog for rural clinics with unreliable internet."
+            }
+          ]
+        },
+        {
+          "id": "prototype",
+          "session_id": "prototype",
+          "messages": [
+            {
+              "role": "user",
+              "content": "The first prototype used one large CSV. Staff could find medicines but could not trace each record to its source or date."
+            }
+          ]
+        },
+        {
+          "id": "failure",
+          "session_id": "field-trial",
+          "messages": [
+            {
+              "role": "user",
+              "content": "During the Pine Valley field trial, stale dosage records remained visible after an update, and staff could not tell which record was current."
+            }
+          ]
+        },
+        {
+          "id": "pivot",
+          "session_id": "redesign",
+          "messages": [
+            {
+              "role": "user",
+              "content": "The team replaced overwrite-in-place with append-only, source-linked versions and explicit current versus historical states."
+            }
+          ]
+        },
+        {
+          "id": "constraint",
+          "session_id": "deployment",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Clinic devices have 2 GB RAM and 20 GB disk. The service must run locally with compact storage and should not call a model when no retrieval query is needed."
+            }
+          ]
+        },
+        {
+          "id": "outcome",
+          "session_id": "pilot",
+          "messages": [
+            {
+              "role": "user",
+              "content": "The pilot recovered 97% of requested facts across three clinic sessions. The team selected the versioned evidence catalog for the next trial and postponed automatic summaries."
+            }
+          ]
+        },
+        {
+          "id": "decoy",
+          "session_id": "manuals",
+          "messages": [
+            {
+              "role": "user",
+              "content": "The printed clinic manuals will use blue covers."
+            }
+          ]
+        }
+      ],
+      "searches": [
+        {
+          "id": "project-arc",
+          "query": "Summarize Project Lumen from its original goal through the failed prototype, redesign, operating constraints, and pilot decision.",
+          "top_k": 10,
+          "evidence_alternatives": [
+            [
+              "goal:0",
+              "prototype:0",
+              "failure:0",
+              "pivot:0",
+              "constraint:0",
+              "outcome:0"
+            ]
+          ],
+          "forbidden_sources": [
+            "decoy:0"
+          ],
+          "reference": "Project Lumen began as an offline rural-clinic medicine catalog. The single-CSV prototype lacked source and date traceability, and stale dosage records persisted after updates. The team shifted to append-only source-linked versions with current and historical states. Because clinic devices have 2 GB RAM and 20 GB disk and unreliable internet, it chose the compact local versioned evidence catalog for the next trial. The pilot recovered 97% of requested facts; automatic summaries were postponed."
+        }
+      ]
+    },
+    {
+      "id": "streaming-online",
+      "split": "dev",
+      "capabilities": [
+        "I",
+        "I1",
+        "D"
+      ],
+      "steps": [
+        {
+          "op": "add",
+          "id": "initial",
+          "messages": [
+            {
+              "role": "user",
+              "content": "For the weekly status digest, I prefer short bullet points."
+            }
+          ]
+        },
+        {
+          "op": "search",
+          "id": "immediate",
+          "query": "What format did I request for my weekly status digest?",
+          "top_k": 3,
+          "capabilities": [
+            "I",
+            "I1"
+          ],
+          "evidence_alternatives": [
+            [
+              "initial:0"
+            ]
+          ],
+          "reference": "Short bullet points."
+        },
+        {
+          "op": "add",
+          "id": "update",
+          "messages": [
+            {
+              "role": "user",
+              "content": "I changed my weekly status digest preference: use a concise numbered list instead of bullet points."
+            }
+          ]
+        },
+        {
+          "op": "search",
+          "id": "latest",
+          "query": "What is my latest format preference for the weekly status digest?",
+          "top_k": 4,
+          "capabilities": [
+            "I",
+            "I1",
+            "D"
+          ],
+          "evidence_alternatives": [
+            [
+              "update:0"
+            ]
+          ],
+          "forbidden_sources": [
+            "initial:0"
+          ],
+          "reference": "A concise numbered list."
+        }
+      ]
+    },
+    {
+      "id": "streaming-transfer",
+      "split": "dev",
+      "capabilities": [
+        "I",
+        "I2",
+        "G"
+      ],
+      "adds": [
+        {
+          "id": "trajectory",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Completed training trajectory: {\"dataset\": \"synthetic_sql\", \"task_index\": 7, \"eval_feedback\": {\"reward\": 1, \"status\": \"completed\"}, \"trajectory\": [{\"role\": \"assistant\", \"content\": \"Inspect the table schema before choosing a write.\"}, {\"role\": \"assistant\", \"tool_calls\": [{\"type\": \"function\", \"function\": {\"name\": \"execute_sql\", \"arguments\": \"{\\\"query\\\":\\\"PRAGMA table_info(Orders);\\\"}\"}}]}, {\"role\": \"tool\", \"content\": \"Columns: order_id, status, shipped_at.\"}, {\"role\": \"assistant\", \"content\": \"Use the narrowest condition that identifies the requested row, then verify the affected row count.\"}, {\"role\": \"assistant\", \"tool_calls\": [{\"type\": \"function\", \"function\": {\"name\": \"execute_sql\", \"arguments\": \"{\\\"query\\\":\\\"UPDATE Orders SET status=\\\\\\\"shipped\\\\\\\" WHERE order_id=42;\\\"}\"}}]}, {\"role\": \"tool\", \"content\": \"One row updated; a follow-up SELECT confirmed the requested status.\"}]}"
+            }
+          ]
+        }
+      ],
+      "searches": [
+        {
+          "id": "new-task-transfer",
+          "query": "For a new task_index 19 using the same database and execute_sql tool, what safe workflow from the earlier successful task should I reuse?",
+          "top_k": 4,
+          "evidence_alternatives": [
+            [
+              "trajectory:0"
+            ]
+          ],
+          "reference": "Inspect the schema first, use a narrowly scoped condition, check the affected-row count, and verify the result with a follow-up query."
+        }
+      ]
+    },
+    {
+      "id": "experience-data",
+      "split": "dev",
+      "capabilities": [
+        "G",
+        "G4"
+      ],
+      "adds": [
+        {
+          "id": "baseline",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Experiment result: baseline configuration had p95 latency 100 ms, throughput 20 requests per minute, and 1 error."
+            }
+          ]
+        },
+        {
+          "id": "cache",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Experiment result: cache-only configuration had p95 latency 80 ms, throughput 35 requests per minute, and 0 errors."
+            }
+          ]
+        },
+        {
+          "id": "batch",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Experiment result: batch-only configuration had p95 latency 65 ms, throughput 40 requests per minute, and 2 errors."
+            }
+          ]
+        },
+        {
+          "id": "cache-batch",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Experiment result: cache-plus-batch configuration had p95 latency 55 ms, throughput 42 requests per minute, and 0 errors."
+            }
+          ]
+        }
+      ],
+      "searches": [
+        {
+          "id": "compare-experiments",
+          "query": "Among configurations with zero errors, which had the lowest p95 latency, and how much lower was it than baseline?",
+          "top_k": 4,
+          "evidence_alternatives": [
+            [
+              "baseline:0",
+              "cache-batch:0"
+            ]
+          ],
+          "reference": "Cache-plus-batch had the lowest p95 latency among zero-error configurations at 55 ms, which was 45 ms lower than the 100 ms baseline."
+        }
+      ]
+    },
+    {
+      "id": "relative-date-interval",
+      "split": "dev",
+      "capabilities": [
+        "C",
+        "C1"
+      ],
+      "adds": [
+        {
+          "id": "first",
+          "messages": [
+            {
+              "role": "user",
+              "content": "The first audit occurred yesterday.",
+              "timestamp": 1736899200000
+            }
+          ]
+        },
+        {
+          "id": "followup",
+          "messages": [
+            {
+              "role": "user",
+              "content": "The follow-up audit occurred on January 19, 2025.",
+              "timestamp": 1737244800000
+            }
+          ]
+        }
+      ],
+      "searches": [
+        {
+          "id": "relative-days",
+          "query": "How many days passed between the first and follow-up audits?",
+          "top_k": 4,
+          "evidence_alternatives": [
+            [
+              "first:0",
+              "followup:0"
+            ]
+          ],
+          "reference": "Five days passed: the first audit was on January 14, 2025, and the follow-up was on January 19, 2025."
+        }
+      ]
+    },
+    {
+      "id": "governance-supersession",
+      "split": "dev",
+      "capabilities": [
+        "D",
+        "D1",
+        "D2"
+      ],
+      "steps": [
+        {
+          "op": "add",
+          "id": "old",
+          "messages": [
+            {
+              "role": "user",
+              "content": "On March 3, 2025, I said my report cadence was weekly."
+            }
+          ]
+        },
+        {
+          "op": "add",
+          "id": "correction",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Correction on March 8, 2025: my earlier statement was mistaken. My actual current report cadence is biweekly, not weekly."
+            }
+          ]
+        },
+        {
+          "op": "search",
+          "id": "current",
+          "query": "What is my current report cadence?",
+          "top_k": 4,
+          "capabilities": [
+            "D",
+            "D1"
+          ],
+          "evidence_alternatives": [
+            [
+              "correction:0"
+            ]
+          ],
+          "forbidden_sources": [
+            "old:0"
+          ],
+          "reference": "Biweekly. The earlier weekly statement was explicitly corrected as mistaken."
+        },
+        {
+          "op": "search",
+          "id": "history",
+          "query": "What did I say before, and how did I explicitly correct it?",
+          "top_k": 4,
+          "capabilities": [
+            "D",
+            "D2"
+          ],
+          "evidence_alternatives": [
+            [
+              "old:0",
+              "correction:0"
+            ]
+          ],
+          "reference": "I first said weekly on March 3, then explicitly corrected that as a mistake on March 8; the actual cadence is biweekly."
+        }
+      ]
+    },
+    {
+      "id": "privacy-minimal",
+      "split": "dev",
+      "capabilities": [
+        "H",
+        "H2"
+      ],
+      "adds": [
+        {
+          "id": "profile",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Private personal record: my home is 88 Private Road, my emergency contact is Mei at +1 555 010 9900, and I have a severe peanut allergy. Never serve me peanuts."
+            }
+          ]
+        }
+      ],
+      "searches": [
+        {
+          "id": "dietary-restriction",
+          "query": "What food restriction must be respected when preparing a meal for me?",
+          "top_k": 3,
+          "evidence_alternatives": [
+            [
+              "profile:0"
+            ]
+          ],
+          "forbidden_text": [
+            "88 Private Road",
+            "Mei",
+            "+1 555 010 9900"
+          ],
+          "reference": "Do not serve peanuts; the user has a severe peanut allergy."
+        }
+      ]
+    },
+    {
+      "id": "rule-independent-condition",
+      "split": "dev",
+      "capabilities": [
+        "G",
+        "G2"
+      ],
+      "adds": [
+        {
+          "id": "policy",
+          "messages": [
+            {
+              "role": "user",
+              "content": "Production deployment requires approval from two people and completed validation."
+            }
+          ]
+        },
+        {
+          "id": "exception",
+          "messages": [
+            {
+              "role": "user",
+              "content": "During an active emergency incident, one approver is sufficient. The emergency exception does not waive completed validation."
+            }
+          ]
+        },
+        {
+          "id": "state",
+          "messages": [
+            {
+              "role": "user",
+              "content": "An active emergency incident exists. One approver is available, but validation is incomplete."
+            }
+          ]
+        }
+      ],
+      "searches": [
+        {
+          "id": "apply-exception",
+          "query": "Can we deploy now under the emergency exception, and what condition still blocks deployment?",
+          "top_k": 5,
+          "evidence_alternatives": [
+            [
+              "policy:0",
+              "exception:0",
+              "state:0"
+            ]
+          ],
+          "reference": "No. The emergency exception permits one approver, but completed validation is still required and is currently incomplete."
+        }
+      ]
+    }
+  ]
+}

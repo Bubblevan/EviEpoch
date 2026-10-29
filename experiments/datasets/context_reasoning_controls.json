@@ -1,0 +1,76 @@
+{
+  "name": "independent-context-reasoning-controls-v1",
+  "description": "Self-authored controls for implicit dialogue references, personalized constraints, time, rules, corrections and scoped privacy. No private replay content.",
+  "cases": [
+    {
+      "id": "implicit-discussion-order", "capabilities": ["C2"],
+      "adds": [{"id": "conversation", "messages": [
+        {"role": "user", "content": "For the telescope calibration project, first I asked about thermal drift.", "timestamp": 1735689600000},
+        {"role": "user", "content": "Next I asked whether refocusing would compensate for it.", "timestamp": 1735689660000},
+        {"role": "user", "content": "Finally I asked about the budget for that solution.", "timestamp": 1735689720000}
+      ]}],
+      "searches": [{"id": "sequence", "query": "In what order did I raise the three topics in our telescope calibration discussion?", "top_k": 6,
+        "evidence_alternatives": [["conversation:0", "conversation:1", "conversation:2"]],
+        "required_quotes": ["thermal drift", "refocusing", "budget"],
+        "reference": "First thermal drift, next whether refocusing would compensate, finally the budget for that solution."}]
+    },
+    {
+      "id": "personalized-planning-context", "capabilities": ["E1", "E3"],
+      "adds": [{"id": "background", "messages": [
+        {"role": "user", "content": "I prefer listening to books over looking at a screen, especially after dinner."},
+        {"role": "user", "content": "My evenings have to stay quiet because the baby sleeps in the next room."}
+      ]}],
+      "searches": [{"id": "advice", "query": "What personal constraints should shape a relaxing activity for me this evening?", "top_k": 5,
+        "evidence_alternatives": [["background:0", "background:1"]],
+        "required_quotes": ["listening to books", "stay quiet"],
+        "reference": "Prefer listening to books rather than screens after dinner, and keep the activity quiet because the baby sleeps in the next room."}]
+    },
+    {
+      "id": "independent-rule-gate", "capabilities": ["G2"],
+      "steps": [
+        {"op": "add", "id": "policy", "messages": [{"role": "user", "content": "Publishing a research bulletin requires two reviewers and a signed data-release checklist. An urgent deadline reduces the reviewer requirement to one but never waives the checklist."}]},
+        {"op": "add", "id": "pending", "messages": [{"role": "user", "content": "Our deadline is urgent. One reviewer has approved. The data-release checklist is not signed."}]},
+        {"op": "search", "id": "blocked", "query": "Can we publish the bulletin now, and which condition matters?", "top_k": 5,
+          "evidence_alternatives": [["policy:0", "pending:0"]], "required_quotes": ["never waives the checklist", "not signed"],
+          "reference": "No. One reviewer suffices under the urgent deadline, but the signed checklist is still required and is not signed."},
+        {"op": "add", "id": "ready", "messages": [{"role": "user", "content": "Update: the data-release checklist is now signed. The urgent deadline and reviewer approval remain in effect."}]},
+        {"op": "search", "id": "ready", "query": "Can we publish the bulletin now under the urgent-deadline policy?", "top_k": 5,
+          "evidence_alternatives": [["policy:0", "pending:0", "ready:0"], ["policy:0", "ready:0"]], "required_quotes": ["reduces the reviewer requirement to one", "now signed"],
+          "oracle_note": "The update explicitly carries forward reviewer approval and the urgent deadline. Policy plus update is sufficient; demanding the earlier unsigned-checklist record was a non-minimal source constraint, not an answer error.",
+          "reference": "Yes. Under the urgent deadline one reviewer suffices, approval remains in effect, and the required checklist is now signed."}
+      ]
+    },
+    {
+      "id": "dated-duration", "capabilities": ["C1"],
+      "adds": [{"id": "record", "messages": [{"role": "user", "content": "[Time: Apr 19, 2023, 12:00:00] Mira: I joined this choir exactly two years ago today.", "timestamp": 1735689600000}]}],
+      "searches": [{"id": "date", "query": "On what date did Mira join the choir?", "top_k": 4,
+        "evidence_alternatives": [["record:0"]], "required_quotes": ["Apr 19, 2023", "exactly two years ago today"],
+        "reference": "April 19, 2021, using the original record time of April 19, 2023, not the transport timestamp."}]
+    },
+    {
+      "id": "corrected-history", "capabilities": ["D1", "D2"],
+      "adds": [
+        {"id": "old", "messages": [{"role": "user", "content": "On June 2, 2025, I said the club fee was 18 credits."}]},
+        {"id": "correct", "messages": [{"role": "user", "content": "Correction on June 3, 2025: my previous fee statement was a mistake. The club fee is 28 credits, not 18."}]}
+      ],
+      "searches": [
+        {"id": "current", "query": "What is the actual club fee?", "top_k": 4, "evidence_alternatives": [["correct:0"]],
+          "required_quotes": ["28 credits"], "reference": "28 credits. The previous 18-credit statement was explicitly corrected as a mistake."},
+        {"id": "history", "query": "What fee did I originally state and how did I correct it?", "top_k": 4,
+          "evidence_alternatives": [["old:0", "correct:0"]], "required_quotes": ["18 credits", "28 credits"],
+          "reference": "I originally said 18 credits on June 2, then on June 3 explicitly corrected that mistake to 28 credits."}
+      ]
+    },
+    {
+      "id": "attribute-policy-boundary", "capabilities": ["A1", "H2"],
+      "adds": [{"id": "record", "messages": [{"role": "user", "content": "Private badge number: ZETA-771. The public workshop begins at 16:40. My nickname is Rowan. No shoe size is recorded."}]}],
+      "searches": [
+        {"id": "public", "query": "When does the public workshop begin? Do not disclose the private badge number or nickname.", "top_k": 3,
+          "evidence_alternatives": [["record:0"]], "required_quotes": ["16:40"], "forbidden_text": ["ZETA-771", "Rowan"],
+          "reference": "The public workshop begins at 16:40."},
+        {"id": "unknown", "query": "What is my shoe size?", "top_k": 3,
+          "reference": "INSUFFICIENT_EVIDENCE"}
+      ]
+    }
+  ]
+}

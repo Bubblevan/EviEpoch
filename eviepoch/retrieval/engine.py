@@ -15,7 +15,7 @@ from .fusion import merge
 from ..providers import ProviderUnavailable
 from ..manage.temporal import project_state_edges, project_query_state
 
-RETRIEVAL_VERSION = "versioned-coverage-proof-v2"
+RETRIEVAL_VERSION = "source-unit-context-proof-v3"
 
 
 @dataclass
@@ -25,6 +25,9 @@ class Evidence:
     created_at: str | None
     score: float
     source_id: str
+    source_start: int = 0
+    source_spans: tuple[str, ...] = ()
+    source_ranges: tuple[tuple[int, int], ...] = ()
 
 
 def fuse(channels: list[dict[str, float]], k: int = 60) -> dict[str, float]:
@@ -157,8 +160,18 @@ def bind_proofs(plan, snap, query, providers, config):
         staged[oid] = alternatives
     if found != expected.keys():
         raise InvalidExtraction("proof binding omitted an obligation")
+    preferred = data.get("preferred_sources", [])
+    if (not isinstance(preferred, list) or len(preferred) > 8
+            or any(not isinstance(sid, str) or sid not in snap.sources for sid in preferred)):
+        raise InvalidExtraction("invalid preferred proof sources")
     for oid, alternatives in staged.items():
         expected[oid].alternatives = alternatives
+    if preferred:
+        group = [sorted(set(preferred))]
+        if "direct_support" in expected:
+            expected["direct_support"].alternatives = group
+        else:
+            plan.obligations.append(Obligation("direct_support", query, alternatives=group))
     return plan
 
 
@@ -193,16 +206,16 @@ def controlled_fallback(request, plan, snap, evidence, providers, config, budget
     if not isinstance(result, dict):
         raise ProviderUnavailable("evidence audit must be an object")
     ids, status = result.get("ids"), result.get("status")
-    if (not isinstance(ids, list) or status not in {"relevant", "insufficient"}
+    if (not isinstance(ids, list) or status not in {"relevant", "insufficient", "uncertain"}
             or any(not isinstance(sid, str) or sid not in audit_units for sid in ids)
-            or bool(ids) != (status == "relevant")):
+            or bool(ids) != (status in {"relevant", "uncertain"})):
         raise ProviderUnavailable("evidence audit returned invalid or uncertain support")
     if not ids:
         return [], "no_support_in_candidates"
     allowed = {eid: e for eid, e in evidence.items() if eid in ids}
     # This is explicitly partial evidence. It does not turn an unfinished AND proof into a full proof.
     selected = select(plan, allowed, config, request.top_k, budget, "topk")
-    return selected, "verified_fallback" if selected else "no_evidence_fits_budget"
+    return selected, ("uncertain_fallback" if status == "uncertain" else "verified_fallback") if selected else "no_evidence_fits_budget"
 
 
 def _coverage(selected: frozenset[str], plan: QueryPlan) -> float:
@@ -300,6 +313,24 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
         ranked = list(dict.fromkeys(reserved + ranked))[:config.candidate_limit]
     plan.actions = ["PLAN", "SEARCH"]
     snap = view.snapshot(set(ranked), expand=config.graph_depth if config.relations_enabled else 0)
+    context_ids = []
+    if config.context_expansion_enabled and set(plan.intents) & {"order", "history", "global"}:
+        seeds = [snap.sources[sid] for sid in coverage_ids if sid in snap.sources]
+        if not seeds:
+            seeds = sorted(snap.sources.values(), key=lambda s: (-fused.get(s.id, 0), s.id))[:8]
+        neighbor = getattr(view, "source_neighbors", None)
+        if neighbor is not None:
+            context = neighbor(seeds, min(4, config.window_radius), min(32, config.candidate_limit))
+            context_ids = list(context.sources)
+            snap.sources.update(context.sources)
+            snap.nodes.update(context.nodes)
+            snap.spans.update(context.spans)
+            snap.edges = list({e.id: e for e in snap.edges + context.edges}.values())
+            # Neighbors are candidates, not approved evidence. Verification and all
+            # time/governance/disclosure/budget checks still apply below.
+            if config.coverage_enabled:
+                coverage_ids = list(dict.fromkeys(coverage_ids + context_ids))
+                coverage_ids = coverage_ids[:min(config.coverage_source_limit, config.candidate_limit)]
     if config.relations_enabled:
         plan.actions.extend(["TRAVERSE", "PROJECT_TIME", "FIND_COUNTEREVIDENCE", "DRILL_DOWN"])
         # Relevant state peers and counterevidence need not share the query's surface words.
@@ -419,7 +450,8 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
             stamp = source.render()[:-len(source.content)]
             replacements[sid] = span.id
             evidence.pop(sid)
-            evidence[span.id] = Evidence(span.id, f"{stamp}{span.quote}", source.evidence_time, e.score, sid)
+            evidence[span.id] = Evidence(span.id, f"{stamp}{span.quote}", source.evidence_time, e.score, sid,
+                                         source_start=span.byte_start)
     # A source-level AND proof is not automatically satisfied by one replacement span.
     # Unaffordable full-source groups remain missing; audited spans are partial fallback evidence.
     recorder = getattr(providers, "record_selection", None)
@@ -432,9 +464,10 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
     timings["selection"] = (time.perf_counter() - stage) * 1000
     stage = time.perf_counter()
     if config.disclosure_enabled:
-        from .disclosure import disclose
+        from .disclosure import disclose, pack_excerpts
         selected, reviewed = disclose(request.query, plan, selected, snap, providers)
         if reviewed:
+            selected = pack_excerpts(request.query, selected, snap, min(request.top_k, config.return_limit))
             # Disclosure can split/drop a source. Reapply all final-output budgets and
             # never claim that an arbitrary excerpt completed a whole-source proof.
             selected = select(plan, {e.id: e for e in selected}, config, request.top_k, token_budget, "topk")
@@ -453,19 +486,22 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
         selected = [e for e in selected if e.id in support["ids"]]
         if not selected:
             selection_status = "no_attribute_support"
+    # Preserve intra-source offsets even for non-temporal questions. Disjoint
+    # fragments of one correction/rule must not be shuffled by hash tie-breaking.
+    selected.sort(key=lambda e: (-e.score, e.source_id, e.source_start, e.id))
     if "order" in plan.intents:
         from ..ingest.temporal import anchor_for
         def order_key(e):
             source = snap.sources[e.source_id]
             anchor = anchor_for(source).get("time") or "9999"
             if plan.order_by == "record":
-                return ("", source.generation, source.ordinal, e.id)
+                return ("", source.generation, source.ordinal, e.source_start, e.id)
             if plan.order_by == "event":
                 events = [n for n in snap.nodes.values() if e.source_id in n.source_ids and n.occurrence_time.earliest]
                 events.sort(key=lambda n: (-overlap(request.query, n.representation()), n.occurrence_time.earliest, n.id))
                 if events:
                     anchor = events[0].occurrence_time.earliest
-            return (anchor, source.generation, source.ordinal, e.id)
+            return (anchor, source.generation, source.ordinal, e.source_start, e.id)
         selected.sort(key=order_key)
     timings["disclosure"] = (time.perf_counter() - stage) * 1000
     plan.actions.extend(["SELECT", "FINISH"])
@@ -474,10 +510,13 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
              "plan": asdict(plan), "candidates": len(evidence), "selected_ids": sorted(selected_ids),
              "returned_source_ids": sorted({e.source_id for e in selected}),
              "evidence_sources": {e.id: e.source_id for e in selected},
+             "evidence_spans": {e.id: list(e.source_spans) for e in selected if e.source_spans},
+             "evidence_ranges": {e.id: list(e.source_ranges) for e in selected if e.source_ranges},
              "binding_status": binding_status, "selection_status": selection_status,
              "timings_ms": timings, "coverage_candidates": len(coverage_ids),
              "coverage_truncated": coverage_truncated,
              "worked_example_candidates": len(transfer_sources),
+             "context_candidates": len(context_ids),
              "covered_obligations": [o.id for o in plan.obligations if any(set(g) <= selected_ids for g in o.alternatives)],
              "missing_obligations": [o.id for o in plan.obligations if not any(set(g) <= selected_ids for g in o.alternatives)],
              "source_paths": [asdict(e) for e in snap.edges],

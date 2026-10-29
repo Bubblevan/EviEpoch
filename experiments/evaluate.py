@@ -131,13 +131,52 @@ def summarize(rows):
         values = [r[field] for r in searches if r.get(field) is not None]
         return sum(values) / len(values) if values else None
     durations = sorted(r["seconds"] for r in searches)
-    return {"searches": len(searches), "complete_evidence_rate": average("complete_evidence"),
+    return {"searches": len(searches),
+            "complete_evidence_scored": sum(r.get("complete_evidence") is not None for r in searches),
+            "complete_evidence_unknown": sum(r.get("complete_evidence") is None for r in searches),
+            "answers_scored": sum(r.get("answer_correct") is not None for r in searches),
+            "complete_evidence_rate": average("complete_evidence"),
             "complete_source_coverage_rate": average("complete_source_coverage"),
             "evidence_recall": average("evidence_recall"), "leakage_rate": average("leakage"),
             "source_recall": average("source_recall"),
             "abstention_rate": average("retrieval_abstained"), "proxy_answer_accuracy": average("answer_correct"),
             "errors": sum(bool(r.get("error")) for r in searches),
             "search_p95_seconds": durations[min(len(durations)-1, int(len(durations)*0.95))] if durations else None}
+
+
+def acceptance(rows, *, answer):
+    """Keep answer correctness, known evidence checks, privacy and abstention conjunctive."""
+    searches = [r for r in rows if r['op'] == 'search']
+    failures = []
+    for row in searches:
+        reasons = []
+        if row.get('error'):
+            reasons.append('error')
+        if answer and row.get('answer_correct') is not True:
+            reasons.append('answer')
+        if row.get('leakage') is not False:
+            reasons.append('privacy_unverified_or_failed')
+        if row.get('complete_evidence') is False or row.get('complete_source_coverage') is False:
+            reasons.append('evidence')
+        if row.get('retrieval_abstained') is False:
+            reasons.append('abstention')
+        if reasons:
+            failures.append({'case': row['case'], 'id': row['id'], 'reasons': reasons})
+    return {'passed': bool(searches) and not failures, 'checks': len(searches), 'failures': failures,
+            'evidence_unknown': sum(r.get('complete_evidence') is None for r in searches),
+            'scope': 'local self-authored controls; unknown evidence sufficiency is reported, not graded as complete'}
+
+
+def failed_searches(case, error, *, answer):
+    queries = case.get('searches') or [s for s in case.get('steps', []) if s.get('op') == 'search']
+    return [{"op": "search", "case": case["id"], "id": q["id"],
+             "capabilities": q.get("capabilities", case["capabilities"]), "seconds": 0,
+             "complete_evidence": False if q.get("evidence_alternatives") else None,
+             "complete_source_coverage": False if q.get("evidence_alternatives") else None,
+             "source_recall": 0 if q.get("evidence_alternatives") else None,
+             "evidence_recall": 0 if q.get("evidence_alternatives") else None, "leakage": None,
+             "retrieval_abstained": False if q.get("must_abstain") else None,
+             "answer_correct": False if answer else None, "error": type(error).__name__} for q in queries]
 
 
 def capture_structured_io(providers: Providers, records: list[dict]) -> None:
@@ -166,6 +205,7 @@ def main():
     parser.add_argument("--dataset", type=Path, default=Path(__file__).with_name('datasets') / 'public_controls.json')
     parser.add_argument("--deepseek", action="store_true")
     parser.add_argument("--answer", action="store_true", help="run fixed local Answer plus reference judge")
+    parser.add_argument("--require-pass", action="store_true", help="fail exit status on any answer, privacy, known evidence or abstention failure")
     parser.add_argument("--arms", nargs="+", default=["full", "topk", "greedy", "hybrid"],
                         choices=["full", "topk", "greedy", "hybrid", "no-relations", "no-consolidation", "no-reflection"])
     parser.add_argument("--cases", nargs="*")
@@ -202,19 +242,13 @@ def main():
                                               "stage": getattr(exc, "stage", None),
                                               "reason": str(exc) if isinstance(exc, InvalidExtraction) else None})
                     # Failed cases stay in the denominator; never inflate a method's score by dropping them.
-                    searches = case.get("searches") or [step for step in case.get("steps", []) if step.get("op") == "search"]
-                    rows.extend({"op": "search", "case": case["id"], "id": q["id"],
-                                 "capabilities": q.get("capabilities", case["capabilities"]),
-                                 "seconds": 0, "complete_evidence": False if q.get("evidence_alternatives") else None,
-                                 "evidence_recall": 0 if q.get("evidence_alternatives") else None, "leakage": None,
-                                 "retrieval_abstained": False if q.get("must_abstain") else None,
-                                 "answer_correct": False if args.answer else None, "error": type(exc).__name__}
-                                for q in searches)
+                    rows.extend(failed_searches(case, exc, answer=args.answer))
         capability_names = sorted({cap for row in rows if row["op"] == "search"
                                    for cap in row.get("capabilities", [])})
         slices = {cap: summarize([r for r in rows if r["op"] == "search" and cap in r["capabilities"]])
                   for cap in capability_names}
-        results["arms"][arm] = {"summary": summarize(rows), "capability_slices": slices, "rows": rows}
+        results["arms"][arm] = {"summary": summarize(rows), "acceptance": acceptance(rows, answer=args.answer),
+                                "capability_slices": slices, "rows": rows}
         print(json.dumps({"arm": arm, **summarize(rows)}, ensure_ascii=False), flush=True)
     results["usage"] = providers.usage
     if args.capture_io:
@@ -222,7 +256,7 @@ def main():
     results["manifest"] = build(config)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding='utf-8')
-    return 1 if results["errors"] else 0
+    return 1 if results["errors"] or (args.require_pass and any(not arm['acceptance']['passed'] for arm in results['arms'].values())) else 0
 
 
 if __name__ == '__main__':

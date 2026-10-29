@@ -242,7 +242,7 @@ class ReadSession:
             self.generation, self.policy_generation = view.generation, view.policy_generation
 
     def __getattr__(self, name):
-        if name not in {"dense", "lexical", "temporal", "snapshot", "related", "coverage", "follow"}:
+        if name not in {"dense", "lexical", "temporal", "snapshot", "related", "coverage", "follow", "source_neighbors"}:
             raise AttributeError(name)
         def read(*args, **kwargs):
             started = time.perf_counter()
@@ -322,6 +322,36 @@ class View:
                     if len(result) >= limit:
                         return result
         return result
+
+    def source_neighbors(self, sources, radius: int, limit: int) -> Snapshot:
+        """Bounded original-turn context within the same Add and session, still active.
+
+        Generation scopes the indexed SQL scan to a single published Add. Never
+        cross requests or infer adjacency from a similar speaker/entity name.
+        """
+        ids = set()
+        ordinal = "CAST(payload::jsonb->>'ordinal' AS INTEGER)" if self.repo.pg else "CAST(json_extract(payload,'$.ordinal') AS INTEGER)"
+        for source in sources:
+            if radius <= 0 or len(ids) >= limit:
+                break
+            rows = self.c.execute(
+                "SELECT id,payload FROM ee_objects WHERE ns=? AND active>0 AND kind='source' "
+                f"AND generation=? AND {ordinal} BETWEEN ? AND ? ORDER BY {ordinal},id LIMIT ?",
+                (self.ns, source.generation, max(0, source.ordinal-radius), source.ordinal+radius,
+                 min(2*radius+1, limit-len(ids)))).fetchall()
+            for oid, payload in rows:
+                other = json.loads(payload)
+                if other['request_id'] == source.request_id and other['session_id'] == source.session_id:
+                    ids.add(oid)
+        context = self.snapshot(ids)
+        # Derived episode/summary dependencies may drill into additional sources.
+        # They must not turn this bounded turn expansion into a whole-history scan.
+        sources = {sid: source for sid, source in context.sources.items() if sid in ids}
+        nodes = {nid: node for nid, node in context.nodes.items() if set(node.source_ids) <= sources.keys()}
+        spans = {sid: span for sid, span in context.spans.items() if span.source_id in sources}
+        edges = [edge for edge in context.edges if edge.origin in nodes and edge.target in nodes
+                 and set(edge.source_ids) <= sources.keys()]
+        return Snapshot(context.generation, context.policy_generation, sources, nodes, edges, spans)
 
     def lexical(self, query: str, limit: int) -> dict[str, float]:
         query_terms = list(dict.fromkeys(terms(query)))[:128]

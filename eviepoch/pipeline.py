@@ -286,7 +286,16 @@ class MemoryPipeline:
                     return {"data": []}, {"generation": 0, "selected_ids": []}
                 planning_started = time.perf_counter()
                 if self.config.profile == "full":
-                    plan = parse_plan(self.providers.plan(request.query, request.options), request.query)
+                    draft = self.providers.plan(request.query, request.options)
+                    try:
+                        plan = parse_plan(draft, request.query)
+                    except InvalidExtraction as error:
+                        repair = getattr(self.providers, "repair_plan", None)
+                        if repair is None:
+                            raise
+                        # One source-free schema repair; the query/options remain data.
+                        revised = repair(request.query, request.options, draft, str(error))
+                        plan = parse_plan(revised, request.query)
                 else:
                     plan = QueryPlan(["fact"], obligations=[Obligation("o1", request.query)])
                 planning_ms = (time.perf_counter() - planning_started) * 1000

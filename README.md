@@ -108,6 +108,8 @@ episode 只作有来源的导航。global/list/order 查询增加跨会话覆盖
 
 2026-10-30 的证据保留修复、真实本机 HTTP smoke、私有回放的脱敏元数据与验证限制见 [回放复核](docs/SMOKE_PACKING_REVIEW.md)。该轮全套离线回归为 230 项通过；本机成功结果不等于新的官方成绩。
 
+后续答案级回放、原文片段编号、来源成组预算与 LLM 评审边界见 [答案级复核](docs/ANSWER_REPLAY_REVIEW.md)。当前代码离线回归 272 项通过；最终真实模型验收被 DeepSeek 402（Insufficient Balance）中断，尚未宣布最终版本通过或官方提分。
+
 冻结候选配置：
 
 ```powershell
