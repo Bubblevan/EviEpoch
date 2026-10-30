@@ -4,6 +4,7 @@ __pycache__/
 *.py[cod]
 .env
 data/
+logs/
 tests/
 experiments/*.jsonl
 .env.*

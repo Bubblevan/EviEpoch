@@ -91,6 +91,22 @@ def _endpoint(value: str, name: str) -> str:
     return value.rstrip("/")
 
 
+def _chat_completion_with_one_extra_5xx_retry(client, *, stage: str | None = None, **request):
+    """Add one single-shot retry after the SDK's existing transient retries, for HTTP 5xx only."""
+    try:
+        return client.chat.completions.create(**request)
+    except Exception as exc:
+        from openai import InternalServerError
+
+        if not isinstance(exc, InternalServerError):
+            raise
+        log.warning("provider_stage_retry stage=%s http_status=%s error_type=%s",
+                    stage or "structured", exc.status_code, type(exc).__name__)
+        # The normal client has max_retries=1. Disable SDK retries on this final
+        # attempt so the bound is exactly one additional HTTP request.
+        return client.with_options(max_retries=0).chat.completions.create(**request)
+
+
 def _unit(values: object, dimensions: int) -> np.ndarray:
     vector = np.asarray(values, dtype=np.float64)
     if vector.shape != (dimensions,) or not np.isfinite(vector).all():
@@ -135,7 +151,8 @@ class Providers:
             raise error
         started = time.perf_counter()
         try:
-            response = self._client(False).chat.completions.create(
+            response = _chat_completion_with_one_extra_5xx_retry(
+                self._client(False), stage=stage,
                 model=self.config.llm_model,
                 messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
                 temperature=0, max_tokens=max_tokens, response_format={"type": "json_object"},
