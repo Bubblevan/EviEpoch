@@ -33,10 +33,25 @@ def pack_excerpts(query, evidence, snapshot, limit):
             if not item.content.startswith(prefix):
                 raise ProviderUnavailable("cannot pack an unvalidated evidence envelope", stage="disclosure")
             quote = item.content[len(prefix):]
-            span = locate(source, quote, occurrence=0)
+            if len(item.source_ranges) == 1:
+                start, end = item.source_ranges[0]
+                raw = source.content.encode("utf-8")
+                if not 0 <= start < end <= len(raw):
+                    raise ProviderUnavailable("invalid selected source range", stage="disclosure")
+                source_quote = raw[start:end].decode("utf-8")
+                if not item.content.endswith(source_quote):
+                    raise ProviderUnavailable("selected quote does not match its source range", stage="disclosure")
+                char_start = len(raw[:start].decode("utf-8"))
+                char_end = len(raw[:end].decode("utf-8"))
+                span = locate(source, source_quote, char_start=char_start, char_end=char_end, occurrence=0)
+            else:
+                source_quote = quote
+                span = locate(source, quote, occurrence=0)
             if span.id != item.id:
                 raise ProviderUnavailable("cannot pack an unvalidated source span", stage="disclosure")
-            quotes.append(quote)
+            attribution = "" if restricted else attribution_prefix(source)
+            quotes.append(source_quote[len(attribution):] if attribution and source_quote.startswith(attribution)
+                          else source_quote)
             span_ids.append(span.id)
             ranges.append((span.byte_start, span.byte_end))
         result.append(Evidence(stable_id('disclosure-bundle-v1', sid, span_ids),

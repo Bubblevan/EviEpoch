@@ -28,9 +28,11 @@ def build(config: Settings, image_digest: str | None = None, smoke_id: str | Non
     for key in ("llm_base_url", "embed_base_url", "rerank_url"):
         parts = urlsplit(fields[key])
         fields[key] = {"host": parts.hostname, "path": parts.path}
+    fields["rerank_model_path"] = Path(config.rerank_model_path).name
     code_hashes = {str(p.relative_to(root)).replace("\\", "/"): hashlib.sha256(p.read_bytes()).hexdigest()
                    for p in sorted((root / "eviepoch").rglob("*")) if p.is_file() and p.suffix in {".py", ".html"}}
-    for path in [root / "requirements.txt", root / "Dockerfile", root / "THIRD_PARTY_NOTICES.md"]:
+    for path in [root / "requirements.txt", root / "requirements-reranker.txt",
+                 root / "Dockerfile", root / "Dockerfile.reranker", root / "THIRD_PARTY_NOTICES.md"]:
         if path.exists():
             code_hashes[str(path.relative_to(root))] = hashlib.sha256(path.read_bytes()).hexdigest()
     eligible_models = config.llm_model == "gpt-4o-mini" and config.embed_model == "text-embedding-v4"

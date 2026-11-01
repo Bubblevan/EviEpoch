@@ -17,12 +17,31 @@ from pathlib import Path
 
 import numpy as np
 
-from ..domain import (Edge, Governance, IdempotencyConflict, IngestBusy, Node, Snapshot,
-                     Source, Span, encode, node_from_dict, stable_id)
+from ..domain import (Edge, Governance, IdempotencyConflict, IngestBusy, Node, PublishConflict, Snapshot,
+                     Source, Span, date_mentions, encode, node_from_dict, signal_tags, stable_id)
 from ..retrieval.lexical import frequencies, terms
 from ..governance.lifecycle import apply_policy
 from ..governance.provenance import attach
+from .schema import graph_indexes, schema, temporal_indexes
+from .entities import entity_key as _entity_key, index_entity_mentions
+from .view import Connection, ReadSession, View
 
+def _span_index_body(span: Span, sources: dict[str, Source]) -> str:
+    source = sources.get(span.source_id)
+    metadata = [f"role:{source.role}"] if source else []
+    if source and source.evidence_time:
+        metadata.append(f"source_time:{source.evidence_time}")
+    if span.date_mentions:
+        metadata.append("date_mentions:" + ",".join(span.date_mentions))
+    metadata.extend(f"signal:{tag}" for tag in span.signal_tags)
+    return " ".join([*metadata, span.quote])
+
+def _source_index_body(source: Source) -> str:
+    metadata = [f"signal:{tag}" for tag in signal_tags(source.content)]
+    dates = date_mentions(source.content)
+    if dates:
+        metadata.append("date_mentions:" + ",".join(dates))
+    return " ".join([source.render(), *metadata])
 
 class Repository:
     def __init__(self, config, identity: dict):
@@ -54,12 +73,72 @@ class Repository:
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.execute("PRAGMA secure_delete=ON")
         self._conn.executescript(schema(False, self.config.embed_dimensions))
+        self._ensure_sqlite_search_schema()
         row = self._conn.execute("SELECT value FROM ee_metadata WHERE key='embedding_identity'").fetchone()
         if row and row[0] != self.identity:
             self.close()
             raise RuntimeError("Embedding configuration differs; use a new database")
         self._conn.execute("INSERT OR IGNORE INTO ee_metadata(key,value) VALUES('embedding_identity',?)",
                            (self.identity,))
+
+    def _ensure_sqlite_search_schema(self):
+        """Upgrade local temporal and entity indexes without rewriting source evidence."""
+        columns = {row[1] for row in self._conn.execute("PRAGMA table_info(ee_objects)")}
+        for name in ("occurrence_start", "occurrence_end", "mention_start", "stored_at"):
+            if name not in columns:
+                self._conn.execute(f"ALTER TABLE ee_objects ADD COLUMN {name} TEXT")
+        self._conn.executescript(temporal_indexes(False) + graph_indexes())
+        row = self._conn.execute("SELECT value FROM ee_metadata WHERE key='schema_version'").fetchone()
+        version = int(row[0]) if row else 0
+        if version < 3:
+            spans = []
+            for ns, oid, kind, raw in self._conn.execute("SELECT ns,id,kind,payload FROM ee_objects").fetchall():
+                data = json.loads(raw)
+                if kind == "source":
+                    source = Source(**{**data, "stored_at": data.get("stored_at", "")})
+                    mentions = date_mentions(source.content)
+                    self._conn.execute(
+                        "UPDATE ee_objects SET asserted_at=?,stored_at=?,mention_start=?,valid_start=NULL,valid_end=NULL "
+                        "WHERE ns=? AND id=?",
+                        (source.evidence_time, source.stored_at, mentions[0] if mentions else None, ns, oid))
+                elif kind == "span":
+                    spans.append((ns, oid, data))
+                    mentions = data.get("date_mentions") or date_mentions(data.get("quote", ""))
+                    self._conn.execute(
+                        "UPDATE ee_objects SET mention_start=?,valid_start=NULL,valid_end=NULL WHERE ns=? AND id=?",
+                        (mentions[0] if mentions else data.get("temporal_start"), ns, oid))
+                else:
+                    occurrence = data.get("occurrence_time") or {}
+                    self._conn.execute(
+                        "UPDATE ee_objects SET occurrence_start=?,occurrence_end=?,asserted_at=COALESCE(?,asserted_at) "
+                        "WHERE ns=? AND id=?",
+                        (occurrence.get("earliest"), occurrence.get("latest"), data.get("asserted_at"), ns, oid))
+            for ns, oid, data in spans:
+                parent = self._conn.execute("SELECT asserted_at,stored_at FROM ee_objects WHERE ns=? AND id=?",
+                                            (ns, data.get("source_id"))).fetchone()
+                if parent:
+                    self._conn.execute("UPDATE ee_objects SET asserted_at=?,stored_at=? WHERE ns=? AND id=?",
+                                       (*parent, ns, oid))
+            self._conn.execute("UPDATE ee_objects SET stored_at=(SELECT MIN(s.stored_at) FROM ee_dependencies d "
+                                "JOIN ee_objects s ON s.ns=d.ns AND s.id=d.source_id AND s.kind='source' "
+                                "WHERE d.ns=ee_objects.ns AND d.object_id=ee_objects.id) "
+                                "WHERE stored_at IS NULL")
+        if version < 4:
+            self._conn.execute("DELETE FROM ee_entity_mentions")
+            rows = self._conn.execute("SELECT ns,id,kind,payload FROM ee_objects WHERE kind NOT IN "
+                                      "('source','span')").fetchall()
+            for ns, oid, _kind, raw in rows:
+                self._index_entity_mentions(self._conn, ns, oid, json.loads(raw))
+        self._conn.execute("INSERT INTO ee_metadata(key,value) VALUES('schema_version','4') "
+                            "ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+
+    @staticmethod
+    def _entity_key(value):
+        return _entity_key(value)
+
+    @staticmethod
+    def _index_entity_mentions(c, ns, oid, data):
+        index_entity_mentions(c, ns, oid, data)
 
     def close(self):
         if self._conn is not None:
@@ -123,9 +202,32 @@ class Repository:
             c.execute("UPDATE ee_requests SET lease=0 WHERE ns=? AND id=? AND owner=? AND status='pending'",
                       (ns, request_id, owner))
 
+    def prepare_publish(self, ns: str, nodes: list[Node], edges: list[Edge], reconcile):
+        """Reconcile outside the write transaction so every derived object can be indexed first.
+
+        publish() verifies the read generation under lock. A conflict causes the caller to
+        rebuild this projection before retrying; committed visibility remains atomic.
+        """
+        import copy
+        prepared_nodes, prepared_edges = copy.deepcopy(nodes), copy.deepcopy(edges)
+        with self.view(ns) as view:
+            base_generation = view.generation
+            old = view.related(prepared_nodes)
+            linked = view.snapshot({oid for edge in prepared_edges for oid in (edge.origin, edge.target)})
+            old.nodes.update(linked.nodes)
+            old.sources.update(linked.sources)
+            old.spans.update(linked.spans)
+            old.edges = list({e.id: e for e in old.edges + linked.edges}.values())
+            prepared_nodes, prepared_edges = reconcile(prepared_nodes, prepared_edges, old)
+            present_vectors = {row[0] for row in view._by_ids(
+                "SELECT id FROM ee_vectors WHERE ns=? AND id IN ({ids})",
+                [node.id for node in prepared_nodes])}
+        missing_vectors = {node.id for node in prepared_nodes} - present_vectors
+        return base_generation, prepared_nodes, prepared_edges, missing_vectors
+
     def publish(self, ns: str, request_id: str, owner: str, sources: list[Source], spans: list[Span],
                 nodes: list[Node], edges: list[Edge], policies: list[Governance], vectors: dict,
-                reconcile) -> int:
+                base_generation: int) -> int:
         with self.transaction(ns, True) as c:
             suffix = " FOR UPDATE" if self.pg else ""
             generation, policy_generation = c.execute(
@@ -134,27 +236,31 @@ class Repository:
                                (ns, request_id)).fetchone()
             if ledger != (owner, "pending"):
                 raise IngestBusy("ingestion lease was replaced")
+            if generation != base_generation:
+                raise PublishConflict("namespace generation changed during derived index preparation")
             generation += 1
-            view = View(self, c, ns)
-            # Coordination runs against the final serialized namespace generation, after model work.
-            old = view.related(nodes)
-            linked = view.snapshot({oid for edge in edges for oid in (edge.origin, edge.target)})
-            old.nodes.update(linked.nodes)
-            old.sources.update(linked.sources)
-            old.spans.update(linked.spans)
-            old.edges = list({e.id: e for e in old.edges + linked.edges}.values())
-            nodes, edges = reconcile(nodes, edges, old)
+            chunked_sources = {source.id for source in sources
+                               if len(source.content.encode("utf-8")) > self.config.source_chunk_bytes}
             for source in sources:
                 source.generation = generation
-                self._put(c, ns, source.id, "source", encode(source), source.content,
-                          source.asserted_at, generation, vector=vectors.get(source.id))
+                self._put(c, ns, source.id, "source", encode(source), _source_index_body(source),
+                          source.evidence_time, generation,
+                          vector=None if source.id in chunked_sources else vectors.get(source.id),
+                          mention_start=(date_mentions(source.content) or [None])[0], stored_at=source.stored_at)
+            source_map = {source.id: source for source in sources}
             for span in spans:
-                self._put(c, ns, span.id, "span", encode(span), "", None, generation,
-                          dependencies=[span.source_id])
+                index_body = _span_index_body(span, source_map)
+                source = source_map.get(span.source_id)
+                self._put(c, ns, span.id, "span", encode(span), index_body,
+                          source.evidence_time if source else None, generation,
+                          dependencies=[span.source_id], vector=vectors.get(span.id),
+                          mention_start=span.temporal_start, stored_at=source.stored_at if source else None)
             for node in nodes:
                 node.generation = generation
+                node_sources = [source_map[sid] for sid in node.source_ids if sid in source_map]
                 self._put(c, ns, node.id, node.kind, encode(node), node.representation(), node.asserted_at,
-                          generation, node, node.source_ids, vectors.get(node.id))
+                          generation, node, node.source_ids, vectors.get(node.id),
+                          stored_at=min((source.stored_at for source in node_sources), default=None))
             for edge in edges:
                 c.execute("INSERT INTO ee_edges(ns,id,origin,target,kind,payload) VALUES(?,?,?,?,?,?) "
                           "ON CONFLICT(ns,id) DO UPDATE SET payload=excluded.payload",
@@ -179,23 +285,37 @@ class Repository:
         return generation
 
     def _put(self, c, ns, oid, kind, payload, body, asserted_at, generation,
-             node=None, dependencies=(), vector=None):
+             node=None, dependencies=(), vector=None, valid_start=None, *, occurrence_start=None,
+             occurrence_end=None, mention_start=None, stored_at=None):
         freq = frequencies(body)
         keys = node.key if node else ("", "", "")
-        start = node.valid_time.earliest if node else None
+        start = node.valid_time.earliest if node else valid_start
         end = node.valid_time.latest if node else None
+        occurrence_start = node.occurrence_time.earliest if node else occurrence_start
+        occurrence_end = node.occurrence_time.latest if node else occurrence_end
         if kind == "summary":
             prior = c.execute("SELECT id FROM ee_objects WHERE ns=? AND kind='summary' AND subject_key=? "
                               "AND predicate_key=? AND scope_key=? AND id<>?", (ns, *keys, oid)).fetchall()
             for previous, in prior:
                 for table, column in (("ee_objects", "id"), ("ee_vectors", "id"),
                                       ("ee_postings", "object_id"), ("ee_dependencies", "object_id"),
-                                      ("ee_provenance", "id"), ("ee_versions", "id")):
+                                      ("ee_provenance", "id"), ("ee_versions", "id"),
+                                      ("ee_entity_mentions", "object_id")):
                     c.execute(f"DELETE FROM {table} WHERE ns=? AND {column}=?", (ns, previous))
         c.execute("INSERT INTO ee_objects(ns,id,kind,payload,body,asserted_at,generation,active,subject_key,"
-                  "predicate_key,scope_key,valid_start,valid_end,length) VALUES(?,?,?,?,?,?,?,1,?,?,?,?,?,?) "
-                  "ON CONFLICT(ns,id) DO UPDATE SET payload=excluded.payload,generation=excluded.generation",
-                  (ns, oid, kind, payload, body, asserted_at, generation, *keys, start, end, sum(freq.values())))
+                  "predicate_key,scope_key,valid_start,valid_end,occurrence_start,occurrence_end,mention_start,"
+                  "stored_at,length) VALUES(?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?) "
+                  "ON CONFLICT(ns,id) DO UPDATE SET payload=excluded.payload,body=excluded.body,"
+                  "asserted_at=excluded.asserted_at,generation=excluded.generation,active=1,"
+                  "subject_key=excluded.subject_key,predicate_key=excluded.predicate_key,scope_key=excluded.scope_key,"
+                  "valid_start=excluded.valid_start,valid_end=excluded.valid_end,"
+                  "occurrence_start=excluded.occurrence_start,occurrence_end=excluded.occurrence_end,"
+                  "mention_start=excluded.mention_start,stored_at=excluded.stored_at,length=excluded.length",
+                  (ns, oid, kind, payload, body, asserted_at, generation, *keys, start, end,
+                   occurrence_start, occurrence_end, mention_start, stored_at, sum(freq.values())))
+        if node is not None:
+            c.execute("DELETE FROM ee_entity_mentions WHERE ns=? AND object_id=?", (ns, oid))
+            self._index_entity_mentions(c, ns, oid, asdict(node))
         for sid in dependencies:
             c.execute("INSERT INTO ee_dependencies(ns,object_id,source_id) VALUES(?,?,?) ON CONFLICT DO NOTHING",
                       (ns, oid, sid))
@@ -216,6 +336,21 @@ class Repository:
             c.execute(f"INSERT INTO ee_vectors(ns,id,embedding) VALUES(?,?,{cast}) ON CONFLICT(ns,id) DO NOTHING",
                       (ns, oid, value))
 
+    def summary_index_metrics(self, ns: str) -> dict:
+        """Read live summary index coverage directly from the authoritative database."""
+        with self.transaction(ns) as c:
+            summary_count = c.execute("SELECT COUNT(*) FROM ee_objects WHERE ns=? AND active>0 AND kind='summary'",
+                                      (ns,)).fetchone()[0]
+            with_vector = c.execute("SELECT COUNT(*) FROM ee_objects o JOIN ee_vectors v "
+                                    "ON v.ns=o.ns AND v.id=o.id WHERE o.ns=? AND o.active>0 AND o.kind='summary'",
+                                    (ns,)).fetchone()[0]
+            with_lexical = c.execute("SELECT COUNT(DISTINCT o.id) FROM ee_objects o JOIN ee_postings p "
+                                     "ON p.ns=o.ns AND p.object_id=o.id WHERE o.ns=? AND o.active>0 "
+                                     "AND o.kind='summary'", (ns,)).fetchone()[0]
+        return {"summary_count": int(summary_count), "summary_with_vector_count": int(with_vector),
+                "summary_lexical_hit_rate": (float(with_lexical) / summary_count if summary_count else None),
+                "summary_lexical_metric": "fraction of active summaries with >=1 indexed lexical term"}
+
     def inspect(self, ns: str) -> dict:
         with self.view(ns) as view:
             snap = view.snapshot()
@@ -229,284 +364,3 @@ class Repository:
                     "spans": [asdict(s) for s in snap.spans.values()],
                     "nodes": [asdict(n) for n in snap.nodes.values()],
                     "edges": [asdict(e) for e in snap.edges], "operations": operations, "versions": versions}
-
-
-class ReadSession:
-    """Optimistic read: the caller must validate both generations before publishing."""
-    def __init__(self, repo, ns):
-        self.repo, self.ns = repo, ns
-        self.timings_ms = {"database_open": 0.0, "database_work": 0.0}
-        started = time.perf_counter()
-        with repo.view(ns) as view:
-            self.timings_ms["database_open"] += (time.perf_counter() - started) * 1000
-            self.generation, self.policy_generation = view.generation, view.policy_generation
-
-    def __getattr__(self, name):
-        if name not in {"dense", "lexical", "temporal", "snapshot", "related", "coverage", "follow", "source_neighbors"}:
-            raise AttributeError(name)
-        def read(*args, **kwargs):
-            started = time.perf_counter()
-            with self.repo.view(self.ns) as view:
-                acquired = time.perf_counter()
-                self.timings_ms["database_open"] += (acquired - started) * 1000
-                result = getattr(view, name)(*args, **kwargs)
-                self.timings_ms["database_work"] += (time.perf_counter() - acquired) * 1000
-                return result
-        return read
-
-
-class Connection:
-    def __init__(self, raw, pg):
-        self.raw, self.pg = raw, pg
-
-    def execute(self, sql, args=()):
-        if self.pg:
-            return self.raw.execute(sql.replace("?", "%s"), args if args else None)
-        return self.raw.execute(sql, args)
-
-
-class View:
-    def __init__(self, repo: Repository, c: Connection, ns: str):
-        self.repo, self.c, self.ns = repo, c, ns
-        row = c.execute("SELECT generation,policy_generation FROM ee_namespaces WHERE ns=?", (ns,)).fetchone()
-        self.generation, self.policy_generation = row or (0, 0)
-
-    def related(self, nodes: list[Node]) -> Snapshot:
-        ids = set()
-        for key in {n.key for n in nodes}:
-            ids.update(r[0] for r in self.c.execute(
-                "SELECT id FROM ee_objects WHERE ns=? AND active>0 AND subject_key=? AND predicate_key=? "
-                "AND scope_key=? ORDER BY generation DESC LIMIT 256", (self.ns, *key)).fetchall())
-        return self.snapshot(ids)
-
-    def context(self, text: str, limit=60) -> Snapshot:
-        ranked = self.lexical(text, limit)
-        recent = [r[0] for r in self.c.execute(
-            "SELECT id FROM ee_objects WHERE ns=? AND active>0 AND kind NOT IN ('source','span','summary','episode') "
-            "ORDER BY generation DESC,id LIMIT ?", (self.ns, limit)).fetchall()]
-        return self.snapshot(set(ranked) | set(recent))
-
-    def follow(self, nodes: list[Node]) -> Snapshot:
-        """Follow explicit identity links, never join equal surface names speculatively."""
-        subjects = {n.value_id.casefold() for n in nodes if n.value_id}
-        rows = self._by_ids("SELECT id FROM ee_objects WHERE ns=? AND active>0 AND subject_key IN ({ids}) "
-                            "ORDER BY generation DESC,id LIMIT " + str(self.repo.config.graph_budget), subjects)
-        return self.snapshot({r[0] for r in rows[:self.repo.config.graph_budget]})
-
-    def coverage(self, query: str, limit: int) -> list[str]:
-        """Diversify lexical source candidates across sessions before within-session rank."""
-        candidates = self.lexical(query, min(self.repo.config.graph_budget, limit * 8))
-        broad = not candidates
-        if broad:
-            # A genuine "summarize our history" request may name no stored topic.
-            # Seed both ends of the history; semantic verification happens outside SQL.
-            cap = max(1, self.repo.config.graph_budget // 2)
-            candidates = {}
-            for order in ("ASC", "DESC"):
-                rows = self.c.execute("SELECT id FROM ee_objects WHERE ns=? AND active>0 AND kind='source' "
-                                      f"ORDER BY generation {order},id LIMIT ?", (self.ns, cap)).fetchall()
-                candidates.update({r[0]: 1.0 for r in rows})
-        snap = self.snapshot(set(candidates))
-        groups = {}
-        for source in snap.sources.values():
-            if not broad and not set(terms(query)).intersection(terms(source.content)):
-                continue
-            groups.setdefault(source.session_id, []).append(source)
-        for group in groups.values():
-            group.sort(key=lambda s: (s.generation, s.ordinal, s.id))
-        result = []
-        for index in range(max(map(len, groups.values()), default=0)):
-            for key in sorted(groups):
-                if index < len(groups[key]):
-                    result.append(groups[key][index].id)
-                    if len(result) >= limit:
-                        return result
-        return result
-
-    def source_neighbors(self, sources, radius: int, limit: int) -> Snapshot:
-        """Bounded original-turn context within the same Add and session, still active.
-
-        Generation scopes the indexed SQL scan to a single published Add. Never
-        cross requests or infer adjacency from a similar speaker/entity name.
-        """
-        ids = set()
-        ordinal = "CAST(payload::jsonb->>'ordinal' AS INTEGER)" if self.repo.pg else "CAST(json_extract(payload,'$.ordinal') AS INTEGER)"
-        for source in sources:
-            if radius <= 0 or len(ids) >= limit:
-                break
-            rows = self.c.execute(
-                "SELECT id,payload FROM ee_objects WHERE ns=? AND active>0 AND kind='source' "
-                f"AND generation=? AND {ordinal} BETWEEN ? AND ? ORDER BY {ordinal},id LIMIT ?",
-                (self.ns, source.generation, max(0, source.ordinal-radius), source.ordinal+radius,
-                 min(2*radius+1, limit-len(ids)))).fetchall()
-            for oid, payload in rows:
-                other = json.loads(payload)
-                if other['request_id'] == source.request_id and other['session_id'] == source.session_id:
-                    ids.add(oid)
-        context = self.snapshot(ids)
-        # Derived episode/summary dependencies may drill into additional sources.
-        # They must not turn this bounded turn expansion into a whole-history scan.
-        sources = {sid: source for sid, source in context.sources.items() if sid in ids}
-        nodes = {nid: node for nid, node in context.nodes.items() if set(node.source_ids) <= sources.keys()}
-        spans = {sid: span for sid, span in context.spans.items() if span.source_id in sources}
-        edges = [edge for edge in context.edges if edge.origin in nodes and edge.target in nodes
-                 and set(edge.source_ids) <= sources.keys()]
-        return Snapshot(context.generation, context.policy_generation, sources, nodes, edges, spans)
-
-    def lexical(self, query: str, limit: int) -> dict[str, float]:
-        query_terms = list(dict.fromkeys(terms(query)))[:128]
-        if not query_terms:
-            return {}
-        if self.repo.pg:
-            # Aggregate postings and IDF in the database; transfer only the bounded candidate pool.
-            rows = self.c.execute("""
-                WITH stats AS (
-                  SELECT COUNT(*)::double precision AS n,AVG(length)::double precision AS avg
-                  FROM ee_objects WHERE ns=? AND active>0 AND length>0
-                ), df AS (
-                  SELECT p.term,COUNT(*)::double precision AS n FROM ee_postings p JOIN ee_objects o
-                    ON o.ns=p.ns AND o.id=p.object_id
-                  WHERE p.ns=? AND p.term=ANY(?::text[]) AND o.active>0 GROUP BY p.term
-                )
-                SELECT p.object_id,SUM(LN(1+(s.n-d.n+0.5)/(d.n+0.5))*p.tf*2.2 /
-                  (p.tf+1.2*(0.25+0.75*o.length/s.avg))) AS score
-                FROM ee_postings p JOIN ee_objects o ON o.ns=p.ns AND o.id=p.object_id
-                JOIN df d ON d.term=p.term CROSS JOIN stats s
-                WHERE p.ns=? AND p.term=ANY(?::text[]) AND o.active>0
-                GROUP BY p.object_id ORDER BY score DESC,p.object_id LIMIT ?
-                """, (self.ns, self.ns, query_terms, self.ns, query_terms, limit)).fetchall()
-            return {oid: float(score) for oid, score in rows}
-        n, avg = self.c.execute("SELECT COUNT(*),AVG(length) FROM ee_objects WHERE ns=? "
-                                "AND active>0 AND length>0", (self.ns,)).fetchone()
-        if not n:
-            return {}
-        avg = float(avg)
-        scores = {}
-        for term in query_terms:
-            rows = self.c.execute("SELECT p.object_id,p.tf,o.length FROM ee_postings p JOIN ee_objects o "
-                                  "ON o.ns=p.ns AND o.id=p.object_id WHERE p.ns=? AND p.term=? AND o.active>0",
-                                  (self.ns, term)).fetchall()
-            df = len(rows)
-            idf = math.log(1 + (n - df + 0.5) / (df + 0.5))
-            for oid, tf, length in rows:
-                scores[oid] = scores.get(oid, 0) + idf * tf * 2.2 / (tf + 1.2 * (0.25 + 0.75 * length / avg))
-        return dict(sorted(scores.items(), key=lambda x: (-x[1], x[0]))[:limit])
-
-    def dense(self, vector, limit: int) -> dict[str, float]:
-        vector = np.asarray(vector, dtype=np.float32)
-        if self.repo.pg:
-            literal = json.dumps(vector.tolist())
-            rows = self.c.execute("SELECT v.id,1-(v.embedding <=> ?::vector) AS score FROM ee_vectors v "
-                                  "JOIN ee_objects o ON o.ns=v.ns AND o.id=v.id "
-                                  "WHERE v.ns=? AND o.active>0 ORDER BY v.embedding <=> ?::vector,v.id LIMIT ?",
-                                  (literal, self.ns, literal, limit)).fetchall()
-            return dict(rows)
-        rows = self.c.execute("SELECT v.id,v.embedding FROM ee_vectors v JOIN ee_objects o "
-                              "ON o.ns=v.ns AND o.id=v.id WHERE v.ns=? AND o.active>0", (self.ns,)).fetchall()
-        scores = [(oid, float(np.frombuffer(blob, dtype=np.float32) @ vector)) for oid, blob in rows]
-        return dict(sorted(scores, key=lambda x: (-x[1], x[0]))[:limit])
-
-    def temporal(self, date: str | None, limit: int) -> dict[str, float]:
-        if not date:
-            return {}
-        rows = self.c.execute("SELECT id FROM ee_objects WHERE ns=? AND active>0 AND valid_start<=? "
-                              "ORDER BY valid_start DESC LIMIT ?", (self.ns, date, limit)).fetchall()
-        return {r[0]: 1 / (i + 1) for i, r in enumerate(rows)}
-
-    def _by_ids(self, statement: str, ids):
-        """Bounded IN batches keep snapshot materialization independent of candidate count RTTs."""
-        ordered = sorted(set(ids))
-        rows = []
-        for start in range(0, len(ordered), 400):
-            block = ordered[start:start + 400]
-            placeholders = ",".join("?" for _ in block)
-            rows.extend(self.c.execute(statement.format(ids=placeholders), (self.ns, *block)).fetchall())
-        return rows
-
-    def _objects(self, ids):
-        return self._by_ids("SELECT kind,payload FROM ee_objects WHERE ns=? AND active>0 AND id IN ({ids})", ids)
-
-    def _edges_for(self, ids, limit=None):
-        rows = {}
-        for field in ("origin", "target"):
-            for payload, in self._by_ids("SELECT payload FROM ee_edges WHERE ns=? AND " + field + " IN ({ids})", ids):
-                edge = Edge(**json.loads(payload))
-                rows[edge.id] = edge
-        result = [rows[key] for key in sorted(rows)]
-        return result[:limit] if limit is not None else result
-
-    def snapshot(self, ids: set[str] | None = None, expand: int = 0) -> Snapshot:
-        if ids is None:
-            rows = self.c.execute("SELECT kind,payload FROM ee_objects WHERE ns=? AND active>0", (self.ns,)).fetchall()
-        else:
-            ids, frontier = set(ids), set(ids)
-            for _ in range(expand):
-                edges = self._edges_for(frontier, self.repo.config.graph_budget)
-                frontier = {oid for edge in edges for oid in (edge.origin, edge.target)} - ids
-                ids.update(frontier)
-                if not frontier:
-                    break
-            source_ids = {row[0] for row in self._by_ids(
-                "SELECT source_id FROM ee_dependencies WHERE ns=? AND object_id IN ({ids})", ids)}
-            rows = self._objects(ids | source_ids)
-            source_ids.update(json.loads(payload)["id"] for kind, payload in rows if kind == "source")
-            rows.extend(self._by_ids(
-                "SELECT o.kind,o.payload FROM ee_objects o JOIN ee_dependencies d "
-                "ON d.ns=o.ns AND d.object_id=o.id WHERE d.ns=? AND o.active>0 AND d.source_id IN ({ids})", source_ids))
-        sources, nodes, spans = {}, {}, {}
-        for kind, payload in rows:
-            data = json.loads(payload)
-            if kind == "source":
-                sources[data["id"]] = Source(**data)
-            elif kind == "span":
-                spans[data["id"]] = Span(**data)
-            else:
-                nodes[data["id"]] = node_from_dict(data)
-        missing = {sid for node in nodes.values() for sid in node.source_ids} - sources.keys()
-        for kind, payload in self._objects(missing):
-            if kind == "source":
-                source = Source(**json.loads(payload))
-                sources[source.id] = source
-        nodes = {oid: node for oid, node in nodes.items() if set(node.source_ids) <= sources.keys()}
-        candidate_edges = [edge for edge in self._edges_for(nodes) if edge.origin in nodes and edge.target in nodes]
-        missing = {sid for edge in candidate_edges for sid in edge.source_ids} - sources.keys()
-        for kind, payload in self._objects(missing):
-            if kind == "source":
-                source = Source(**json.loads(payload))
-                sources[source.id] = source
-        edges = [edge for edge in candidate_edges if set(edge.source_ids) <= sources.keys()]
-        spans = {oid: span for oid, span in spans.items() if span.source_id in sources}
-        return Snapshot(self.generation, self.policy_generation, sources, nodes, edges, spans)
-
-
-
-def schema(pg: bool, dimensions: int) -> str:
-    vector_type = f"vector({int(dimensions)})" if pg else "BLOB"
-    return f"""
-    CREATE TABLE IF NOT EXISTS ee_metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS ee_namespaces(ns TEXT PRIMARY KEY,generation INTEGER NOT NULL,policy_generation INTEGER NOT NULL);
-    CREATE TABLE IF NOT EXISTS ee_requests(ns TEXT NOT NULL,id TEXT NOT NULL,payload_hash TEXT NOT NULL,status TEXT NOT NULL,
-      owner TEXT NOT NULL,lease DOUBLE PRECISION NOT NULL,generation INTEGER NOT NULL,PRIMARY KEY(ns,id));
-    CREATE TABLE IF NOT EXISTS ee_objects(ns TEXT NOT NULL,id TEXT NOT NULL,kind TEXT NOT NULL,payload TEXT NOT NULL,
-      body TEXT NOT NULL,asserted_at TEXT,generation INTEGER NOT NULL,active INTEGER NOT NULL,subject_key TEXT NOT NULL,
-      predicate_key TEXT NOT NULL,scope_key TEXT NOT NULL,valid_start TEXT,valid_end TEXT,length INTEGER NOT NULL,PRIMARY KEY(ns,id));
-    CREATE INDEX IF NOT EXISTS ee_objects_generation ON ee_objects(ns,active,generation);
-    CREATE INDEX IF NOT EXISTS ee_objects_key ON ee_objects(ns,subject_key,predicate_key,scope_key);
-    CREATE INDEX IF NOT EXISTS ee_objects_time ON ee_objects(ns,valid_start);
-    CREATE TABLE IF NOT EXISTS ee_vectors(ns TEXT NOT NULL,id TEXT NOT NULL,embedding {vector_type} NOT NULL,PRIMARY KEY(ns,id));
-    CREATE TABLE IF NOT EXISTS ee_postings(ns TEXT NOT NULL,term TEXT NOT NULL,object_id TEXT NOT NULL,tf INTEGER NOT NULL,
-      PRIMARY KEY(ns,term,object_id));
-    CREATE TABLE IF NOT EXISTS ee_dependencies(ns TEXT NOT NULL,object_id TEXT NOT NULL,source_id TEXT NOT NULL,
-      PRIMARY KEY(ns,object_id,source_id));
-    CREATE INDEX IF NOT EXISTS ee_dependencies_source ON ee_dependencies(ns,source_id);
-    CREATE TABLE IF NOT EXISTS ee_provenance(ns TEXT NOT NULL,id TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(ns,id));
-    CREATE TABLE IF NOT EXISTS ee_versions(ns TEXT NOT NULL,id TEXT NOT NULL,generation INTEGER NOT NULL,payload TEXT NOT NULL,
-      PRIMARY KEY(ns,id,generation));
-    CREATE TABLE IF NOT EXISTS ee_edges(ns TEXT NOT NULL,id TEXT NOT NULL,origin TEXT NOT NULL,target TEXT NOT NULL,
-      kind TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(ns,id));
-    CREATE INDEX IF NOT EXISTS ee_edges_origin ON ee_edges(ns,origin);
-    CREATE INDEX IF NOT EXISTS ee_edges_target ON ee_edges(ns,target);
-    CREATE TABLE IF NOT EXISTS ee_tombstones(ns TEXT NOT NULL,id TEXT NOT NULL,action TEXT NOT NULL,generation INTEGER NOT NULL,PRIMARY KEY(ns,id));
-    CREATE TABLE IF NOT EXISTS ee_operations(ns TEXT NOT NULL,id TEXT NOT NULL,generation INTEGER NOT NULL,kind TEXT NOT NULL,
-      payload TEXT NOT NULL,PRIMARY KEY(ns,id));
-    """

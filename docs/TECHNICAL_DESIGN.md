@@ -7,7 +7,7 @@
 
 **实现进展：** 本文保留完整目标设计；当前分层代码、实际验收与未完成项见 [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md)。开发验证按用户要求暂用 DeepSeek，正式模型合同不变。
 
-本文定义拟实现的完整参赛架构。现有 FastAPI/SQLite 双通道 runner 为 B0 实验基线；下述记忆管理与联合取证模块是目标系统，不是对当前部署能力的描述。
+本文定义拟实现的完整参赛架构。SQLite 是显式本地验证适配器；标准生产 Compose 使用 PostgreSQL/pgvector。本文的容量与 SLA 目标仍需在目标硬件和真实数据库上验收，不代表已经达到。
 
 ## 1. 技术主张
 
@@ -117,6 +117,8 @@ LLM 输出源句和消息序号，确定性代码再定位源片段并核验 has
 - anchor_span 与 derivation：相对日期如何由来源时间归一化。
 
 使用半开区间 [start,end) 的精确值时，必须有足够证据；未知边界不是一个捏造的精确时间。计划/愿望/条件句不能覆盖已发生状态，晚写入的旧历史不能成为最新有效事实。
+
+检索索引分别保存 valid、occurrence、mention、asserted 与 stored 时间；Source/Span 正文里的日期只进入 mention 索引，不能填入事实 valid_time。as-of 有效性查询按完整区间重叠条件检索（valid_start 不晚于查询上界，valid_end 为空或不早于查询下界）；相对事件比较即使没有 as_of 锚点，也会用词法候选召回带 occurrence_time 的对象。asserted_at 与 stored_at 分别表示来源陈述和系统记录时间，不作为 occurrence_time 的替代。旧 SQLite/PG 索引迁移会清除历史 Source/Span 上误用的 valid_start，并回填各自时间列。时间范围端点按闭区间日粒度比较，测试覆盖有效结束日期之后的排除与未来结束日期之前的保留，避免把未来失效误判为已过期。
 
 “现在”优先采用题内明确时间；否则绑定当前 user 已提交来源陈述所定义的时间视野，未来计划中的日期不扩大“当前”时点，不能用服务器今天日期随意解释历史样本。无法确定相对锚点时保留多个时间假设，由查询求解器联合取证。
 
@@ -232,6 +234,21 @@ QueryPlan 至少包含：
 初始用 RRF 或校准融合统一候选，再用 cross-encoder 估计 query/obligation/候选的关系。词法统计按 user 计算；Postgres 原生 tsvector rank 不冒充 BM25，全局 IDF 不能让其他样本数据影响本用户排名。
 
 图扩散从实体/语义/时间锚点启动，按边类型和证据质量传播。图有界稀疏，不生成所有事件两两时间边；历史顺序和范围由时间索引支持。访问过的 source/span 去重，不因看过一个 session 就永久跳过整个 session。
+
+Entity/Relation 图召回是独立 RRF 检索臂，在 Top-N 截断前按 QueryPlan 实体、属性查实体提及倒排索引，再沿显式 entity ID、无 ID 的精确同名实体以及已持久化关系边进行有界多跳。精确同名只产生候选关联，不写入新的事实边；有明确但不一致的 ID 时不靠同名跨越。图候选继续经过统一 rerank、proof binding、来源治理和 Disclosure；图路径不替代原始来源证明。其预算受 graph_budget、graph_depth 限制，并通过 RRF 与 Dense/BM25/Temporal 合流。
+
+时间候选按 valid、occurrence、正文日期 mention、asserted 和 stored 分通道召回。对 “多久之后 / after / between” 一类相对事件关系，即使 QueryPlan 没有 as_of，也会启动 occurrence 通道；该通道先在词法候选中挑带事件时间的对象，因此时间索引是补充召回，而非全库时间扫描或硬过滤器。
+
+当前 Search 的 cross-encoder 链路按以下阶段执行：
+
+1. Dense、user-BM25/lexical、Temporal 与实体提及图通道先做 seed RRF，再执行 Top-N 截断；从保留 seed 扩图后，把新发现的显式关系候选作为独立 relation RRF 通道重新融合。
+2. 从融合快照形成有界 rerank 池。池内按 RRF/来源、时间、规则边（REQUIRES、EXCEPT_IF、RULE_VERSION）和反证/修订边（CONTRADICTS、CORRECTS、RETRACTS、SUPERSEDES）保留类别配额，再按融合分数补足。
+3. 独立 Qwen3-Reranker-0.6B sidecar 对候选批量打分。长来源在调用端切为有界片段；服务按小批次推理、串行限制 GPU/CPU 并发，并设置服务端排队上限。HTTP 调用有独立超时；无效响应、过载、模型未就绪或超时都记录降级并继续使用融合分数。
+4. Rerank 之后执行 State Projection 与 Evidence Proof。成功的 cross-encoder 分数直接替换已评分来源的最终 Evidence Score；Proof Alternatives 使用同一分数的单调归一值参与启发式排序，Beam 使用来源 Evidence Score，之后不再用旧 fused 分数覆盖。超长来源最多保留三个互不重叠片段；规则/程序来源优先保留前提和例外，并把精确来源范围与段落位置带到输出。
+5. rerank 池只控制首次评分，不从快照删除未评分来源。Proof 绑定返回池外来源、局部 Proof 发现池外候选，或缺口搜索召回新来源时，执行一次额外的有界评分并重建 Proof。这样模型不会把一次候选截断变成不可逆过滤。
+6. Disclosure 在选中的原文片段上验证相关性与披露边界；AML Search evidence 只装配通过验证的来源内容、范围和段落 metadata。
+
+实际部署变量、配额及分段默认值见 [.env.example](../.env.example)；reranker sidecar 的部署与降级行为见 [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md)。
 
 ### 8.3 联合优化目标
 

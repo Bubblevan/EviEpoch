@@ -11,24 +11,16 @@ import numpy as np
 
 from ..config import Settings
 from ..observability.diagnostics import log_provider_failure, log_provider_success
+from .errors import ProviderUnavailable, StructuredOutputInvalid, StructuredOutputTruncated
+from .reranker import RerankerClient
 
 log = logging.getLogger(__name__)
 
 
-class ProviderUnavailable(RuntimeError):
-    """A required model stage failed; partial Add must not be reported as success."""
-
-    def __init__(self, message: str, *, stage: str | None = None):
-        super().__init__(message)
-        self.stage = stage
 
 
-class StructuredOutputTruncated(ProviderUnavailable):
-    """A bounded completion ran out of output room; callers may split the input."""
 
 
-class StructuredOutputInvalid(ProviderUnavailable):
-    """A completed response was not a JSON object; ingestion may split boundedly."""
 
 EXTRACT_PROMPT = """You turn a chunk of a conversation into atomic memories for a personal memory index.
 
@@ -138,6 +130,7 @@ class Providers:
 
     def __init__(self, config: Settings):
         self.config = config
+        self._reranker = RerankerClient(config)
         self._chat_client = None
         self._embed_client = None
         self._lock = threading.Lock()
@@ -271,7 +264,7 @@ class Providers:
                   "valid_time": asdict(n.valid_time), "event_time": asdict(n.occurrence_time),
                   "source_ids": n.source_ids} for n in [n for n in snapshot.nodes.values() if n.kind not in {"summary", "episode"}][:128]]
         from ..retrieval.windows import context_windows
-        from ..retrieval.engine import overlap
+        from ..retrieval.scoring import overlap
         from ..ingest.temporal import anchor_for
         sources, remaining = [], 24000
         related_query = query + " " + " ".join(o.query for o in plan.obligations)
@@ -460,21 +453,7 @@ class Providers:
                         "prior": [asdict(n) for n in known.nodes.values() if n.kind not in {"summary", "episode"}]}, ensure_ascii=False), 1400)
 
     def rerank(self, query: str, sources) -> dict[str, float]:
-        import httpx
-        started = time.perf_counter()
-        try:
-            response = httpx.post(self.config.rerank_url, json={"query": query, "documents": [
-                {"id": sid, "text": source.content} for sid, source in sources.items()]},
-                timeout=self.config.request_timeout)
-            response.raise_for_status()
-            scores = {row["id"]: float(row["score"]) for row in response.json()["scores"]}
-            if set(scores) != set(sources) or not all(np.isfinite(v) for v in scores.values()):
-                raise ValueError("reranker must return exactly the supplied candidate IDs with finite scores")
-            return scores
-        except Exception as exc:
-            log_provider_failure(stage="rerank", error=exc,
-                                 duration_ms=(time.perf_counter() - started) * 1000)
-            raise ProviderUnavailable("configured reranker unavailable", stage="rerank") from exc
+        return self._reranker.rerank(query, sources)
 
     def embedding_identity(self) -> dict[str, object]:
         return {

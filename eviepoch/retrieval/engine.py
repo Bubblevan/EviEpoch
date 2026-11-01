@@ -1,286 +1,39 @@
-"""Hybrid discovery, query-conditioned proof bundles and bounded beam selection."""
+"""Hybrid retrieval orchestration: discover, project, prove, disclose, and select."""
 from __future__ import annotations
 
 import math
+import re
 import time
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, replace
 
-import numpy as np
-
-from . import tokens
-from ..domain import InvalidExtraction, Obligation, QueryPlan, Snapshot
-from .lexical import terms
-from .context import temporal_value_request, worked_example_for_reference
-from .fusion import merge
-from ..providers import ProviderUnavailable
+from ..domain import InvalidExtraction, Obligation, QueryPlan
 from ..manage.temporal import project_state_edges, project_query_state
+from ..providers import ProviderUnavailable
+from . import tokens
+from .context import (has_disclosure_restriction, temporal_value_request,
+                      worked_example_for_reference)
+from .evidence import Evidence, _annotate_source_span, _packed_source_items, _paragraph_at
+from .fusion import merge
+from .graph import (_relation_candidate_channel, _source_ids_for_objects,
+                    retrieve as retrieve_graph)
+from .proofs import (_closure, _fallback_sources, _proof_candidate_sources, _time_weight,
+                     bind_proofs, controlled_fallback, proofs)
+from .reranking import _bounded_rerank_ids, _proof_score_map
+from .scoring import overlap
+from .selection import _coverage, select
 
-RETRIEVAL_VERSION = "source-unit-context-proof-v3"
+RETRIEVAL_VERSION = "source-unit-context-proof-v4-multispan"
 
-
-@dataclass
-class Evidence:
-    id: str
-    content: str
-    created_at: str | None
-    score: float
-    source_id: str
-    source_start: int = 0
-    source_spans: tuple[str, ...] = ()
-    source_ranges: tuple[tuple[int, int], ...] = ()
-
+_TEMPORAL_RELATION_QUERY = re.compile(
+    r"\b(?:after|before|later|earlier|preced(?:e|ed|ing)|following|how long|elapsed|duration|"
+    r"how many (?:days?|weeks?|months?|years?)|between|since|timeline|chronolog(?:y|ical))\b|"
+    r"之后|之前|以后|以前|多久|几天|几周|几个月|几年|间隔|先后|时间顺序|时间线|何时|什么时候|"
+    r"最早|最晚|第一次|最后一次",
+    re.IGNORECASE,
+)
 
 def fuse(channels: list[dict[str, float]], k: int = 60) -> dict[str, float]:
     return merge(channels, k)[0]
-
-
-def overlap(left: str, right: str) -> float:
-    a, b = set(terms(left)), set(terms(right))
-    return len(a & b) / max(1, len(a))
-
-
-def _time_weight(node, plan: QueryPlan, snap: Snapshot) -> float:
-    historical = bool(set(plan.intents) & {"as_of", "history", "comparison", "order"})
-    if historical:
-        if plan.as_of.latest and node.valid_time.earliest:
-            if node.valid_time.earliest > plan.as_of.latest:
-                return -0.5
-            if node.valid_time.latest and node.valid_time.latest > plan.as_of.earliest:
-                return 0.3
-        return 0.0
-    if "current" not in plan.intents:
-        return 0.0
-    if node.modality in {"planned", "hypothetical"}:
-        return -0.5
-    withdrawn = any(e.target == node.id and e.kind in {"CORRECTS", "RETRACTS", "SUPERSEDES"}
-                    for e in snap.edges)
-    return -0.4 if withdrawn else 0.3
-
-
-def _closure(node_id: str, plan: QueryPlan, snap: Snapshot, depth: int) -> set[str]:
-    visited, frontier = set(), {node_id}
-    path_sources = set()
-    for _ in range(depth + 1):
-        next_ids = set()
-        for oid in frontier - visited:
-            visited.add(oid)
-            for edge in snap.edges:
-                # Dependent -> prerequisite/exception. Cause -> effect. Keep true direction.
-                if edge.origin == oid and edge.kind in {"REQUIRES", "EXCEPT_IF", "RULE_VERSION"}:
-                    if "procedure" in plan.intents or edge.kind in plan.required_relations:
-                        next_ids.add(edge.target)
-                        path_sources.update(edge.source_ids)
-                if edge.target == oid and edge.kind in {"CAUSE_STATED", "ENABLES", "RESULT_OF"}:
-                    if "why" in plan.intents or edge.kind in plan.required_relations:
-                        next_ids.add(edge.origin)
-                        path_sources.update(edge.source_ids)
-                if edge.target == oid and edge.kind in {"CORRECTS", "RETRACTS"}:
-                    next_ids.add(edge.origin)
-                    path_sources.update(edge.source_ids)
-                if edge.kind == "CONTRADICTS" and oid in {edge.origin, edge.target}:
-                    next_ids.update((edge.origin, edge.target))
-                    path_sources.update(edge.source_ids)
-                if edge.kind in {"SUPERSEDES", "BEFORE"} and oid in {edge.origin, edge.target}:
-                    if set(plan.intents) & {"history", "comparison", "order"}:
-                        next_ids.update((edge.origin, edge.target))
-                        path_sources.update(edge.source_ids)
-        frontier = next_ids - visited
-        if not frontier:
-            break
-    return path_sources | {sid for oid in visited if oid in snap.nodes for sid in snap.nodes[oid].source_ids}
-
-
-def proofs(plan: QueryPlan, snap: Snapshot, scores: dict[str, float], config) -> QueryPlan:
-    for obligation in plan.obligations:
-        ranked = []
-        for node in snap.nodes.values():
-            if node.kind in {"summary", "episode"}:
-                continue
-            lexical = overlap(obligation.query, node.representation())
-            if lexical <= 0:
-                continue
-            value = lexical + _time_weight(node, plan, snap) + scores.get(node.id, 0)
-            ranked.append((value, node))
-        ranked.sort(key=lambda pair: (-pair[0], pair[1].id))
-        if ranked:
-            best = ranked[0][0]
-            for value, node in ranked[:6]:
-                if value < max(0.05, best - 0.18):
-                    continue
-                group = (_closure(node.id, plan, snap, config.graph_depth) if config.relations_enabled
-                         else set(node.source_ids))
-                if group and group <= snap.sources.keys():
-                    obligation.alternatives.append(sorted(group))
-        if not obligation.alternatives:
-            # Dense-only matches can still provide source evidence, but never imply verified relations.
-            candidates = [(scores.get(s.id, 0) + overlap(obligation.query, s.content), s.id)
-                          for s in snap.sources.values()]
-            candidates.sort(key=lambda row: (-row[0], row[1]))
-            for score, sid in candidates[:3]:
-                if score > 0:
-                    obligation.alternatives.append([sid])
-        obligation.alternatives = [list(g) for g in dict.fromkeys(tuple(g) for g in obligation.alternatives)]
-    return plan
-
-
-def bind_proofs(plan, snap, query, providers, config):
-    data = providers.bind_obligations(query, plan, snap)
-    if not isinstance(data, dict):
-        raise InvalidExtraction("proof binding must be an object")
-    rows = data.get("obligations")
-    if not isinstance(rows, list):
-        raise InvalidExtraction("proof binding requires an obligations array")
-    expected = {o.id: o for o in plan.obligations}
-    found = set()
-    staged = {}
-    for row in rows:
-        if not isinstance(row, dict):
-            raise InvalidExtraction("bound obligation must be an object")
-        oid, groups = row.get("id"), row.get("alternatives")
-        if not isinstance(oid, str) or oid not in expected or oid in found or not isinstance(groups, list) or len(groups) > 8:
-            raise InvalidExtraction("invalid bound obligation")
-        found.add(oid)
-        alternatives = []
-        for group in groups:
-            if not isinstance(group, list) or not group or len(group) > 16:
-                raise InvalidExtraction("invalid AND evidence set")
-            refs = set()
-            for key in group:
-                if not isinstance(key, str):
-                    raise InvalidExtraction("evidence IDs must be strings")
-                if key in snap.nodes:
-                    refs.update(_closure(key, plan, snap, config.graph_depth) if config.relations_enabled
-                                else snap.nodes[key].source_ids)
-                elif key in snap.sources:
-                    refs.add(key)
-                else:
-                    raise InvalidExtraction("proof binding invented an evidence ID")
-            if refs <= snap.sources.keys():
-                alternatives.append(sorted(refs))
-        staged[oid] = alternatives
-    if found != expected.keys():
-        raise InvalidExtraction("proof binding omitted an obligation")
-    preferred = data.get("preferred_sources", [])
-    if (not isinstance(preferred, list) or len(preferred) > 8
-            or any(not isinstance(sid, str) or sid not in snap.sources for sid in preferred)):
-        raise InvalidExtraction("invalid preferred proof sources")
-    for oid, alternatives in staged.items():
-        expected[oid].alternatives = alternatives
-    if preferred:
-        group = [sorted(set(preferred))]
-        if "direct_support" in expected:
-            expected["direct_support"].alternatives = group
-        else:
-            plan.obligations.append(Obligation("direct_support", query, alternatives=group))
-    return plan
-
-
-def _fallback_sources(snap, plan):
-    """Only disclose live snapshot sources; exclude clearly inapplicable time/modal states."""
-    result = {}
-    for sid, source in snap.sources.items():
-        nodes = [n for n in snap.nodes.values() if sid in n.source_ids and n.kind not in {"summary", "episode"}]
-        if nodes and "current" in plan.intents and all(n.modality in {"planned", "hypothetical"} for n in nodes):
-            continue
-        if nodes and plan.as_of.latest and all(n.valid_time.earliest and n.valid_time.earliest > plan.as_of.latest
-                                               for n in nodes):
-            continue
-        result[sid] = source
-    return result
-
-
-def controlled_fallback(request, plan, snap, evidence, providers, config, budget):
-    live = _fallback_sources(snap, plan)
-    if not live:
-        return [], "no_support_in_candidates"
-    audit = getattr(providers, "audit_evidence", None)
-    if audit is None:
-        raise ProviderUnavailable("proof selection failed and no independent evidence audit is available")
-    # Audit the actual evidence unit that can be returned. Approval of a large source
-    # must not be reused as proof that an arbitrary short span supports the question.
-    audit_units = {eid: replace(live[e.source_id], id=eid, content=e.content)
-                   for eid, e in evidence.items() if e.source_id in live}
-    if not audit_units:
-        return [], "no_support_in_candidates"
-    result = audit(request.query, plan, audit_units)
-    if not isinstance(result, dict):
-        raise ProviderUnavailable("evidence audit must be an object")
-    ids, status = result.get("ids"), result.get("status")
-    if (not isinstance(ids, list) or status not in {"relevant", "insufficient", "uncertain"}
-            or any(not isinstance(sid, str) or sid not in audit_units for sid in ids)
-            or bool(ids) != (status in {"relevant", "uncertain"})):
-        raise ProviderUnavailable("evidence audit returned invalid or uncertain support")
-    if not ids:
-        return [], "no_support_in_candidates"
-    allowed = {eid: e for eid, e in evidence.items() if eid in ids}
-    # This is explicitly partial evidence. It does not turn an unfinished AND proof into a full proof.
-    selected = select(plan, allowed, config, request.top_k, budget, "topk")
-    return selected, ("uncertain_fallback" if status == "uncertain" else "verified_fallback") if selected else "no_evidence_fits_budget"
-
-
-def _coverage(selected: frozenset[str], plan: QueryPlan) -> float:
-    result = 0.0
-    for o in plan.obligations:
-        if not o.alternatives:
-            continue
-        best = max(len(selected.intersection(group)) / len(group) for group in o.alternatives if group)
-        result += o.weight * (10 if best == 1 else 2 * best)
-    return result
-
-
-def select(plan: QueryPlan, evidence: dict[str, Evidence], config, top_k: int, budget: int,
-           selector: str = "beam") -> list[Evidence]:
-    limit = min(top_k, config.return_limit)
-    if not evidence or limit <= 0 or budget <= 0 or config.char_budget <= 0:
-        return []
-    cost = {sid: tokens.evidence_cost(config, e) for sid, e in evidence.items()}
-    chars = {sid: len(e.content) for sid, e in evidence.items()}
-    max_score = max((e.score for e in evidence.values()), default=1) or 1
-
-    def feasible(ids):
-        return (len(ids) <= limit and sum(cost[sid] for sid in ids) <= budget
-                and sum(chars[sid] for sid in ids) <= config.char_budget)
-
-    def objective(ids):
-        relevance = sum(evidence[sid].score / max_score for sid in ids)
-        return _coverage(ids, plan) + relevance * 0.15 - sum(cost[sid] for sid in ids) / max(budget, 1) * 0.1
-
-    bundles = {frozenset(group) for o in plan.obligations for group in o.alternatives
-               if group and set(group) <= evidence.keys()}
-    ranked = sorted(evidence, key=lambda sid: (-evidence[sid].score, sid))
-    if selector == "topk":
-        chosen = frozenset()
-        for sid in ranked:
-            proposed = chosen | {sid}
-            if feasible(proposed):
-                chosen = proposed
-    elif selector == "greedy":
-        chosen = frozenset()
-        for _ in range(limit):
-            options = [chosen | b for b in bundles if not b <= chosen and feasible(chosen | b)]
-            if not options:
-                break
-            proposed = max(options, key=lambda ids: ((objective(ids) - objective(chosen)) /
-                                                    max(1, sum(cost[s] for s in ids - chosen)), sorted(ids)))
-            if objective(proposed) <= objective(chosen):
-                break
-            chosen = proposed
-    else:
-        beam = [frozenset()]
-        # A state contains the selected source set and implicitly its satisfied AND/OR hypotheses.
-        # Expand proof bundles together, rather than deciding a current fact before selecting evidence.
-        for _ in range(min(limit, len(plan.obligations) + 2)):
-            options = set(beam)
-            for state in beam:
-                options.update(state | bundle for bundle in bundles if not bundle <= state and feasible(state | bundle))
-            next_beam = sorted(options, key=lambda ids: (-objective(ids), len(ids), sorted(ids)))[:config.beam_width]
-            if next_beam == beam:
-                break
-            beam = next_beam
-        chosen = beam[0]
-    # Do not fill a proof-complete set with unrelated records simply to reach top_k.
-    return sorted((evidence[sid] for sid in chosen), key=lambda e: (-e.score, e.id))
-
 
 def retrieve(view, request, plan: QueryPlan, providers, config):
     started = time.perf_counter()
@@ -296,10 +49,29 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
         channels.extend([dense, lexical])
         channel_names.extend([f"dense:q{index}", f"lexical:q{index}"])
         per_query.append(set(dense) | set(lexical))
-    temporal = view.temporal(plan.as_of.latest, config.candidate_limit)
-    if temporal:
-        channels.append(temporal)
-        channel_names.append("temporal")
+    temporal_modes = []
+    if plan.as_of.latest:
+        temporal_modes.append(("valid", plan.as_of.earliest or plan.as_of.latest, plan.as_of.latest))
+        temporal_modes.append(("mention", plan.as_of.earliest or plan.as_of.latest, plan.as_of.latest))
+    if (set(plan.intents) & {"comparison", "history", "order"}
+            or _TEMPORAL_RELATION_QUERY.search(request.query)):
+        temporal_modes.append(("occurrence", None, None))
+    if plan.order_by == "first_mention":
+        temporal_modes.append(("asserted", plan.as_of.earliest, plan.as_of.latest))
+    elif plan.order_by == "record":
+        temporal_modes.append(("stored", plan.as_of.earliest, plan.as_of.latest))
+    temporal_candidates = {}
+    for mode, date_start, date_end in temporal_modes:
+        retrieved_temporal = view.temporal(date_start, config.candidate_limit, date_end=date_end,
+                                           mode=mode, query=request.query)
+        if retrieved_temporal:
+            channels.append(retrieved_temporal)
+            temporal_candidates.update(retrieved_temporal)
+            channel_names.append(f"temporal_{mode}")
+    graph_candidates = retrieve_graph(view, request.query, plan, config)
+    if graph_candidates:
+        channels.append(graph_candidates)
+        channel_names.append("graph")
     fused, channel_ranks = merge(channels, cap=config.candidate_limit, names=channel_names)
     ranked = sorted(fused, key=lambda oid: (-fused[oid], oid))[:config.candidate_limit]
     coverage_ids = []
@@ -311,6 +83,7 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
         coverage_ids = coverage_ids[:coverage_limit]
         reserved = coverage_ids[:config.candidate_limit]
         ranked = list(dict.fromkeys(reserved + ranked))[:config.candidate_limit]
+    seed_ids = set(ranked)
     plan.actions = ["PLAN", "SEARCH"]
     snap = view.snapshot(set(ranked), expand=config.graph_depth if config.relations_enabled else 0)
     context_ids = []
@@ -349,10 +122,18 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
             snap.edges = list({e.id: e for e in snap.edges + linked.edges}.values())
             if not frontier:
                 break
+    relation_channel = (_relation_candidate_channel(snap, seed_ids, request.query, config.graph_depth)
+                        if config.relations_enabled else {})
+    if relation_channel:
+        # Dense, lexical, temporal, and graph-expanded relation candidates now
+        # share one RRF ordering before the bounded cross-encoder pool is built.
+        channels.append(relation_channel)
+        channel_names.append("relation")
+        fused, channel_ranks = merge(channels, cap=config.candidate_limit, names=channel_names)
     source_scores = {sid: fused.get(sid, 0.0) for sid in snap.sources}
-    snap = project_state_edges(snap)
-    if config.state_projection_enabled:
-        snap = project_query_state(snap, plan)
+    for span_id, span in snap.spans.items():
+        if span_id in fused and span.source_id in source_scores:
+            source_scores[span.source_id] = max(source_scores[span.source_id], fused[span_id])
     transfer_sources = [sid for sid, source in snap.sources.items() if worked_example_for_reference(request.query, source)]
     if transfer_sources and "procedure" not in plan.intents:
         plan.intents.append("procedure")
@@ -371,11 +152,68 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
         valid_ids = providers.verify_candidates(request.query, snap.sources)
         snap.sources = {sid: s for sid, s in snap.sources.items() if sid in valid_ids}
         snap.nodes = {nid: n for nid, n in snap.nodes.items() if set(n.source_ids) <= snap.sources.keys()}
-    if config.rerank_url and snap.sources:
-        reranked = providers.rerank(request.query, snap.sources)
-        for sid, score in reranked.items():
-            source_scores[sid] = score
-    plan = proofs(plan, snap, fused, config)
+
+    reranked_source_ids: set[str] = set()
+    rerank_calls = 0
+    rerank_attempts = 0
+    rerank_duration_ms = 0.0
+    rerank_status = "disabled" if not config.rerank_enabled else "skipped_empty"
+    reranker = getattr(providers, "rerank", None)
+
+    def rerank_sources(scope=None):
+        nonlocal rerank_attempts, rerank_calls, rerank_duration_ms, rerank_status
+        if not config.rerank_enabled:
+            return False
+        pool_ids = _bounded_rerank_ids(snap, source_scores, fused, temporal_candidates.keys(),
+                                       request.query, config, scope)
+        if not pool_ids:
+            return False
+        if reranker is None or not config.rerank_url:
+            rerank_status = "unavailable"
+            return False
+        pool = {sid: snap.sources[sid] for sid in pool_ids}
+        rerank_started = time.perf_counter()
+        try:
+            rerank_attempts += 1
+            scores = reranker(request.query, pool)
+            valid_scores = isinstance(scores, dict) and set(scores) == set(pool)
+            if valid_scores:
+                try:
+                    valid_scores = all(not isinstance(score, bool) and math.isfinite(float(score))
+                                       for score in scores.values())
+                except (TypeError, ValueError, OverflowError):
+                    valid_scores = False
+            if not valid_scores:
+                raise ProviderUnavailable("reranker returned an incomplete or invalid score set", stage="rerank")
+            source_scores.update({sid: float(scores[sid]) for sid in pool})
+            reranked_source_ids.update(pool)
+            rerank_calls += 1
+            rerank_status = "applied" if rerank_calls == 1 else "applied_gap"
+            return True
+        except ProviderUnavailable:
+            rerank_status = "degraded" if not reranked_source_ids else "applied_with_degraded_gap"
+            return False
+        finally:
+            rerank_duration_ms += (time.perf_counter() - rerank_started) * 1000
+
+    # The cross-encoder is a bounded intermediate stage. Unscored sources stay
+    # in the snapshot and can be brought back by local proofs or the gap search.
+    rerank_sources()
+    # State projection and proof construction consume the reranked candidate scores.
+    snap = project_state_edges(snap)
+    if config.state_projection_enabled:
+        snap = project_query_state(snap, plan)
+
+    def refresh_proofs():
+        if reranked_source_ids:
+            scores = _proof_score_map(snap, source_scores, reranked_source_ids)
+            return proofs(plan, snap, scores, config, reranked_source_ids)
+        return proofs(plan, snap, fused, config)
+
+    plan = refresh_proofs()
+    local_proof_sources = {sid for obligation in plan.obligations
+                           for group in obligation.alternatives for sid in group}
+    local_proof_sources.update(_proof_candidate_sources(plan, snap, source_scores, config))
     timings["discovery"] = (time.perf_counter() - stage) * 1000
     stage = time.perf_counter()
     binding_status = "disabled"
@@ -391,29 +229,42 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
                 obligation.alternatives = []
     # One targeted gap iteration is bounded by the declared action/candidate budget.
     missing = [o for o in plan.obligations if not o.alternatives]
+    gap_source_ids = set()
     if missing and config.gap_iterations:
         plan.actions.append("SEARCH")
         ids = set()
         for o in missing:
             ids.update(view.lexical(o.query, config.candidate_limit))
         extra = view.snapshot(ids, expand=config.graph_depth if config.relations_enabled else 0)
+        gap_source_ids.update(extra.sources)
         snap.sources.update(extra.sources)
         snap.nodes.update(extra.nodes)
         snap.spans.update(extra.spans)
         snap.edges = list({e.id: e for e in snap.edges + extra.edges}.values())
+        for sid, source in extra.sources.items():
+            source_scores.setdefault(sid, fused.get(sid, overlap(request.query, source.content) * 0.01))
+    current_proof_sources = {sid for obligation in plan.obligations
+                             for group in obligation.alternatives for sid in group}
+    supplemental_scope = (local_proof_sources | current_proof_sources | gap_source_ids
+                          | set(coverage_ids) | set(transfer_sources)) - reranked_source_ids
+    if supplemental_scope and reranked_source_ids:
+        rerank_sources(supplemental_scope)
+    if gap_source_ids:
         snap = project_state_edges(snap)
         if config.state_projection_enabled:
             snap = project_query_state(snap, plan)
-        if binding_enabled and binding_status not in {"invalid", "unavailable"}:
-            try:
-                plan = bind_proofs(plan, snap, request.query, providers, config)
-                binding_status = "bound" if any(o.alternatives for o in plan.obligations) else "empty"
-            except (InvalidExtraction, ProviderUnavailable) as exc:
-                binding_status = "invalid" if isinstance(exc, InvalidExtraction) else "unavailable"
-                for obligation in plan.obligations:
-                    obligation.alternatives = []
-        elif not binding_enabled:
-            plan = proofs(plan, snap, fused, config)
+    plan = refresh_proofs()
+    if gap_source_ids and binding_enabled and binding_status not in {"invalid", "unavailable"}:
+        try:
+            plan = bind_proofs(plan, snap, request.query, providers, config)
+            binding_status = "bound" if any(o.alternatives for o in plan.obligations) else "empty"
+        except (InvalidExtraction, ProviderUnavailable) as exc:
+            binding_status = "invalid" if isinstance(exc, InvalidExtraction) else "unavailable"
+            for obligation in plan.obligations:
+                obligation.alternatives = []
+    if (not plan.obligations or any(not o.alternatives for o in plan.obligations)
+            or binding_status in {"invalid", "unavailable", "empty"}):
+        plan = refresh_proofs()
     timings["binding"] = (time.perf_counter() - stage) * 1000
     stage = time.perf_counter()
     if coverage_ids:
@@ -437,41 +288,125 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
     evidence = {sid: Evidence(sid, source.render(), source.evidence_time,
                              source_scores.get(sid, 0.0), sid) for sid, source in snap.sources.items()}
     token_budget = tokens.budget(config, request.query, request.options)
-    # Exact spans rescue long sources that cannot fit as a whole. They have stable source-bound IDs.
-    replacements = {}
+    # Keep several exact, disjoint excerpts from oversized sources. Selection
+    # treats same-source excerpts as one output slot and packs them after review.
     for sid, e in list(evidence.items()):
         if tokens.evidence_cost(config, e) <= token_budget and len(e.content) <= config.char_budget:
             continue
         matching = [s for s in snap.spans.values() if s.source_id == sid]
-        matching.sort(key=lambda s: (-overlap(request.query, s.quote), s.id))
-        if matching:
-            span = matching[0]
-            source = snap.sources[sid]
-            stamp = source.render()[:-len(source.content)]
-            replacements[sid] = span.id
+        queries = [request.query] + [o.query for o in plan.obligations]
+        constraint = re.compile(
+            r"\b(?:except(?:ion)?s?|unless|never|must|only|not|before|after|requires?|required|"
+            r"prerequisite|provided that|subject to)\b|例外|除非|禁止|必须|不得|过敏|前提|条件|仅当",
+            re.I)
+        premise = re.compile(
+            r"\b(?:must|only if|requires?|required|prerequisite|provided that|subject to|"
+            r"before|if|when|condition)\b|必须|仅当|前提|条件|如果|若|需要",
+            re.I)
+        exception = re.compile(
+            r"\b(?:exception|except|unless|excluding|otherwise)\b|例外|除非|除外",
+            re.I)
+        rule_source_ids = {sid for edge in snap.edges
+                           if edge.kind in {"REQUIRES", "EXCEPT_IF", "RULE_VERSION"}
+                           for sid in edge.source_ids}
+        rule_source_ids.update(sid for node in snap.nodes.values()
+                               if node.kind in {"rule", "procedure"} for sid in node.source_ids)
+        preserve_rule_clauses = sid in rule_source_ids or "procedure" in plan.intents
+        ranked_spans = []
+        for span in matching:
+            lexical = max((overlap(query, span.quote) for query in queries), default=0.0)
+            has_constraint = bool(constraint.search(span.quote))
+            relevance = lexical + (0.15 if has_constraint else 0.0)
+            has_rule_clause = bool(premise.search(span.quote) or exception.search(span.quote))
+            if relevance > 0 or (preserve_rule_clauses and has_rule_clause):
+                ranked_spans.append((relevance, lexical, span))
+        ranked_spans.sort(key=lambda row: (-row[0], -row[1], row[2].byte_start, row[2].id))
+        if not ranked_spans:
+            continue
+        source = snap.sources[sid]
+        stamp = (f"[{source.role}] " if has_disclosure_restriction(request.query)
+                 else source.render()[:-len(source.content)] if source.content else source.render())
+        picked, ranges = [], []
+
+        def add_span(span):
+            if any(span.byte_start < end and span.byte_end > start for start, end in ranges):
+                return False
+            paragraph = _paragraph_at(source.content, span.byte_start)
+            item = Evidence(
+                span.id, f"{stamp}{span.quote}", source.evidence_time, e.score, sid,
+                source_start=span.byte_start, source_spans=(span.id,),
+                source_ranges=((span.byte_start, span.byte_end),), source_prefix=stamp,
+                source_paragraphs=(paragraph,))
+            if (len(item.content) > config.char_budget
+                    or tokens.evidence_cost(config, item) > token_budget):
+                return False
+            picked.append(item)
+            ranges.append((span.byte_start, span.byte_end))
+            return True
+
+        if preserve_rule_clauses:
+            # Reserve one high-relevance precondition and one exception when both
+            # exist; one span that contains both naturally satisfies both roles.
+            for pattern in (premise, exception):
+                if any(pattern.search(item.content) for item in picked):
+                    continue
+                for _, _, span in ranked_spans:
+                    if pattern.search(span.quote) and add_span(span):
+                        break
+        for _, _, span in ranked_spans:
+            if len(picked) >= 3:
+                break
+            add_span(span)
+        if picked:
             evidence.pop(sid)
-            evidence[span.id] = Evidence(span.id, f"{stamp}{span.quote}", source.evidence_time, e.score, sid,
-                                         source_start=span.byte_start)
-    # A source-level AND proof is not automatically satisfied by one replacement span.
-    # Unaffordable full-source groups remain missing; audited spans are partial fallback evidence.
+            evidence.update((item.id, item) for item in picked)
+    # A fragment never claims that its full source-level proof group was satisfied.
     recorder = getattr(providers, "record_selection", None)
     if recorder is not None:
         recorder(request.query, plan, evidence, token_budget, config)
-    selected = select(plan, evidence, config, request.top_k, token_budget, config.selector)
-    selection_status = "proof_selected" if selected else "no_evidence_fits_budget"
-    if not selected and binding_enabled and token_budget > 0 and request.top_k > 0 and config.char_budget > 0:
+    selected = select(plan, evidence, config, request.top_k, token_budget,
+                      config.selector, pack_output=False)
+    selected_ids = {e.id for e in selected}
+    proof_complete = all(
+        any(group and set(group) <= selected_ids for group in obligation.alternatives)
+        for obligation in plan.obligations)
+    selection_status = ("proof_selected" if selected and proof_complete
+                        else "partial_selected" if selected else "no_evidence_fits_budget")
+    if (binding_enabled and not proof_complete and token_budget > 0
+            and request.top_k > 0 and config.char_budget > 0):
         selected, selection_status = controlled_fallback(request, plan, snap, evidence, providers, config, token_budget)
     timings["selection"] = (time.perf_counter() - stage) * 1000
     stage = time.perf_counter()
+    reviewed = False
     if config.disclosure_enabled:
         from .disclosure import disclose, pack_excerpts
         selected, reviewed = disclose(request.query, plan, selected, snap, providers)
         if reviewed:
-            selected = pack_excerpts(request.query, selected, snap, min(request.top_k, config.return_limit))
-            # Disclosure can split/drop a source. Reapply all final-output budgets and
-            # never claim that an arbitrary excerpt completed a whole-source proof.
-            selected = select(plan, {e.id: e for e in selected}, config, request.top_k, token_budget, "topk")
             selection_status = "disclosed_spans" if selected else "no_disclosable_support"
+    else:
+        from .disclosure import pack_excerpts
+    for item in selected:
+        _annotate_source_span(item, snap)
+    same_source_spans = {}
+    for item in selected:
+        if item.source_ranges and item.id != item.source_id:
+            same_source_spans.setdefault(item.source_id, []).append(item)
+    needs_span_pack = any(len(items) > 1 for items in same_source_spans.values())
+    if needs_span_pack:
+        # Force same-source excerpts into one return item even when top_k has room.
+        selected = pack_excerpts(request.query, selected, snap, max(0, len(selected) - 1))
+    elif reviewed:
+        selected = pack_excerpts(request.query, selected, snap, min(request.top_k, config.return_limit))
+    if reviewed or needs_span_pack:
+        # Disclosure can split/drop a source. Reapply all final-output budgets and
+        # never claim that an arbitrary excerpt completed a whole-source proof.
+        selected = select(plan, {e.id: e for e in selected}, config, request.top_k, token_budget, "topk")
+    for item in selected:
+        _annotate_source_span(item, snap)
+        if item.source_ranges and not item.source_paragraphs:
+            content = snap.sources[item.source_id].content
+            item.source_paragraphs = tuple(_paragraph_at(content, start)
+                                           for start, _ in item.source_ranges)
     audit = getattr(providers, "audit_attribute_support", None) or getattr(providers, "audit_evidence", None)
     if (config.support_audit_enabled and audit is not None and selected and not transfer_sources
             and not temporal_value_request(request.query, plan)
@@ -504,6 +439,7 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
             return (anchor, source.generation, source.ordinal, e.source_start, e.id)
         selected.sort(key=order_key)
     timings["disclosure"] = (time.perf_counter() - stage) * 1000
+    timings["rerank"] = rerank_duration_ms
     plan.actions.extend(["SELECT", "FINISH"])
     selected_ids = frozenset(e.id for e in selected)
     trace = {"generation": view.generation, "policy_generation": view.policy_generation,
@@ -512,11 +448,19 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
              "evidence_sources": {e.id: e.source_id for e in selected},
              "evidence_spans": {e.id: list(e.source_spans) for e in selected if e.source_spans},
              "evidence_ranges": {e.id: list(e.source_ranges) for e in selected if e.source_ranges},
+             "evidence_paragraphs": {e.id: list(e.source_paragraphs) for e in selected if e.source_paragraphs},
              "binding_status": binding_status, "selection_status": selection_status,
+             "rerank_status": rerank_status,
+             "rerank_attempts": rerank_attempts, "rerank_calls": rerank_calls,
+             "rerank_scored_candidates": len(reranked_source_ids),
+             "rerank_candidate_limit": config.rerank_candidate_limit,
+             "rerank_category_quota": config.rerank_category_quota,
+             "rerank_max_segments": config.rerank_max_segments,
              "timings_ms": timings, "coverage_candidates": len(coverage_ids),
              "coverage_truncated": coverage_truncated,
              "worked_example_candidates": len(transfer_sources),
              "context_candidates": len(context_ids),
+             "retrieval_channels": {name: len(channel) for name, channel in zip(channel_names, channels)},
              "covered_obligations": [o.id for o in plan.obligations if any(set(g) <= selected_ids for g in o.alternatives)],
              "missing_obligations": [o.id for o in plan.obligations if not any(set(g) <= selected_ids for g in o.alternatives)],
              "source_paths": [asdict(e) for e in snap.edges],

@@ -11,5 +11,6 @@ experiments/*.jsonl
 .cache/
 references/
 literature/
+models/
 memory-system-key.txt
 experiments/reports/

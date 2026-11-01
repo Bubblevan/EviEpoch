@@ -1,6 +1,8 @@
 """Adversarial review controls; annotations are test oracles, not quality estimates."""
 import unittest
 from dataclasses import replace
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import test_lifecycle as fixtures
 from test_lifecycle import AnnotatedProviders, fact
@@ -43,14 +45,16 @@ class BindingRegressionTests(fixtures.LifecycleTests):
         self.add("My address is Kyoto.", [fact("My address is Kyoto.", "Kyoto")])
         result, trace = self.pipeline.search_with_trace(SearchRequest("Kyoto address", "u", 3))
         self.assertTrue(result["data"])
-        self.assertEqual(trace["selection_status"], "verified_fallback")
-        self.assertEqual(trace["missing_obligations"], ["o1"])
+        self.assertEqual(trace["selection_status"], "proof_selected")
+        self.assertEqual(trace["binding_status"], "empty")
+        self.assertEqual(trace["covered_obligations"], ["o1"])
+        self.assertEqual(trace["missing_obligations"], [])
 
     def test_empty_binding_and_no_support_remain_empty(self):
         self.add("I enjoy pottery.", [fact("I enjoy pottery.", "pottery", predicate="hobby")])
         result, trace = self.pipeline.search_with_trace(SearchRequest("bank account number", "u", 3))
         self.assertEqual(result["data"], [])
-        self.assertEqual(trace["selection_status"], "no_support_in_candidates")
+        self.assertEqual(trace["selection_status"], "no_attribute_support")
 
     def test_invalid_binding_is_atomic_and_can_recover_from_raw_support(self):
         self.provider.binding = "invalid"
@@ -268,3 +272,89 @@ class LongAddRegressionTests(fixtures.LifecycleTests):
 for _name in list(vars(fixtures.LifecycleTests)):
     if _name.startswith("test_"):
         setattr(LongAddRegressionTests, _name, None)
+
+
+class RerankerStageRegressionTests(fixtures.LifecycleTests):
+    def test_provider_sends_bounded_passages_and_wraps_timeout(self):
+        import httpx
+        config = replace(self.config, rerank_segment_chars=4, rerank_max_segments=3,
+                         rerank_timeout_seconds=2.5)
+        provider = Providers(config)
+        sources = {"source-a": SimpleNamespace(content="abcdefghijklmnopqrstuvwx")}
+        response = SimpleNamespace(raise_for_status=lambda: None,
+                                   json=lambda: {"scores": [{"id": "source-a", "score": 0.7}]})
+        with patch("httpx.post", return_value=response) as post:
+            self.assertEqual(provider.rerank("query", sources), {"source-a": 0.7})
+        request = post.call_args.kwargs["json"]
+        self.assertEqual(request["documents"][0]["segments"], ["abcd", "ijkl", "uvwx"])
+        self.assertLessEqual(post.call_args.kwargs["timeout"].read, 2.5)
+
+        with patch("httpx.post", side_effect=httpx.ReadTimeout("slow")):
+            with self.assertRaises(ProviderUnavailable) as error:
+                provider.rerank("query", sources)
+        self.assertEqual(error.exception.stage, "rerank")
+
+    def test_unavailable_cross_encoder_falls_back_without_dropping_evidence(self):
+        self.add("My preferred color is teal.", [fact("My preferred color is teal.", "teal", predicate="color")])
+        self.provider.rerank = lambda *args: (_ for _ in ()).throw(ProviderUnavailable("sidecar timeout"))
+
+        response, trace = self.pipeline.search_with_trace(SearchRequest("preferred color", "u", 1))
+
+        self.assertTrue(response["data"])
+        self.assertIn("teal", response["data"][0]["content"])
+        self.assertEqual(trace["rerank_status"], "degraded")
+        self.assertEqual(trace["rerank_attempts"], 1)
+
+    def test_cross_encoder_score_drives_final_evidence_order(self):
+        self.add("I enjoy hiking.", [fact("I enjoy hiking.", "hiking", predicate="hobby")], rid="hiking")
+        self.add("I enjoy chess.", [fact("I enjoy chess.", "chess", predicate="hobby")], rid="chess")
+        self.provider.plan_value = {"intents": ["fact"], "obligations": [{"id": "o1", "query": "hobby"}]}
+        self.provider.rerank = lambda query, sources: {
+            sid: (0.91 if "chess" in source.content else 0.12)
+            for sid, source in sources.items()
+        }
+
+        result, trace = self.pipeline.search_with_trace(SearchRequest("What hobby do I enjoy?", "u", 1))
+
+        self.assertEqual(len(result["data"]), 1)
+        self.assertIn("chess", result["data"][0]["content"])
+        self.assertAlmostEqual(result["data"][0]["score"], 0.91)
+        self.assertEqual(trace["rerank_status"], "applied")
+        self.assertEqual(trace["rerank_scored_candidates"], 2)
+
+    def test_out_of_pool_proof_candidate_gets_a_supplemental_rerank(self):
+        self.add("I enjoy hiking.", [fact("I enjoy hiking.", "hiking", predicate="hobby")], rid="hiking")
+        self.add("I enjoy chess.", [fact("I enjoy chess.", "chess", predicate="hobby")], rid="chess")
+        self.provider.plan_value = {"intents": ["fact"], "obligations": [{"id": "o1", "query": "hobby"}]}
+        self.pipeline.config = replace(self.config, rerank_candidate_limit=1)
+        rerank_pools = []
+        supplemental_target = {}
+
+        def rerank(query, sources):
+            rerank_pools.append(set(sources))
+            score = 0.17 if len(rerank_pools) == 1 else 0.93
+            return {sid: score
+                    for sid, source in sources.items()}
+
+        def bind(query, plan, snap):
+            first_pool = rerank_pools[0]
+            omitted = next(sid for sid in snap.sources if sid not in first_pool)
+            supplemental_target["id"] = omitted
+            return {"obligations": [{"id": obligation.id, "alternatives": [[omitted]]}
+                                    for obligation in plan.obligations]}
+
+        self.provider.rerank = rerank
+        self.provider.bind_obligations = bind
+        result, trace = self.pipeline.search_with_trace(SearchRequest("What hobby do I enjoy?", "u", 1))
+
+        self.assertTrue(any(supplemental_target["id"] in pool for pool in rerank_pools[1:]))
+        self.assertEqual(result["data"][0]["id"], supplemental_target["id"])
+        self.assertGreater(result["data"][0]["score"], 0.9)
+        self.assertEqual(trace["rerank_status"], "applied_gap")
+        self.assertEqual(trace["rerank_attempts"], 2)
+        self.assertEqual(trace["rerank_scored_candidates"], 2)
+
+
+for _name in list(vars(fixtures.LifecycleTests)):
+    if _name.startswith("test_"):
+        setattr(RerankerStageRegressionTests, _name, None)

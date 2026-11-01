@@ -64,7 +64,9 @@ def _env_positive_int(name: str, default: int) -> int:
 
 
 def create_app(config: Settings | None = None, memory=None) -> FastAPI:
-    config = config or Settings.from_env()
+    # Defer the production database requirement to ASGI startup so importing the
+    # module-level app stays side-effect-free; startup validation still fails closed.
+    config = config or Settings.from_env(require_postgres=False)
     memory = memory or MemoryPipeline(config)
 
     @asynccontextmanager

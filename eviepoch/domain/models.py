@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 4
 
 
 class IdempotencyConflict(ValueError):
@@ -18,6 +18,10 @@ class IdempotencyConflict(ValueError):
 
 class IngestBusy(RuntimeError):
     pass
+
+
+class PublishConflict(RuntimeError):
+    """The namespace changed while derived objects were being embedded."""
 
 
 class InvalidExtraction(ValueError):
@@ -118,6 +122,9 @@ class Span:
     byte_end: int
     text_hash: str
     quote: str
+    temporal_start: str | None = None
+    signal_tags: list[str] = field(default_factory=list)
+    date_mentions: list[str] = field(default_factory=list)
 
 
 def locate(source: Source, quote: str, *, char_start=0, char_end=None, occurrence=None) -> Span:
@@ -139,6 +146,87 @@ def locate(source: Source, quote: str, *, char_start=0, char_end=None, occurrenc
     byte_end = byte_start + len(quote.encode("utf-8"))
     return Span(stable_id(source.id, byte_start, byte_end), source.id, byte_start, byte_end,
                 hashlib.sha256(quote.encode("utf-8")).hexdigest(), quote)
+
+
+_MENTIONED_DATE = re.compile(r"(?<!\d)(\d{4})(?:[-/.年](\d{1,2})(?:[-/.月](\d{1,2})日?)?)?(?!\d)")
+_NEGATION_SIGNAL = re.compile(r"\b(?:not|never|no|don't|doesn't|didn't|cannot|can't|without)\b|否定|不|没|無|無法|不要|从不|從不", re.I)
+_EXCEPTION_SIGNAL = re.compile(r"\b(?:except|unless|exception|excluding|but only|only if)\b|例外|除非|但仅|但僅|除外", re.I)
+_NUMBER_SIGNAL = re.compile(r"(?<!\w)[+-]?\d+(?:[.,]\d+)*(?:%|％|\s*(?:kg|g|mg|km|m|cm|mm|years?|months?|days?|小时|小時|天|元|美元|件|次))?", re.I)
+
+
+def date_mentions(text: str) -> list[str]:
+    dates = []
+    for year, month, day in _MENTIONED_DATE.findall(text):
+        value = year
+        if month:
+            value += f"-{int(month):02d}"
+        if day:
+            value += f"-{int(day):02d}"
+        try:
+            datetime.fromisoformat(value + ("-01-01" if len(value) == 4 else "-01" if len(value) == 7 else ""))
+        except ValueError:
+            continue
+        # The date is an index hint for source mention time, not a claim about validity.
+        if len(value) == 4:
+            value += "-01-01"
+        elif len(value) == 7:
+            value += "-01"
+        dates.append(value)
+    return list(dict.fromkeys(dates))
+
+
+def annotate_span(span: Span) -> Span:
+    span.date_mentions = date_mentions(span.quote)
+    span.temporal_start = span.date_mentions[0] if span.date_mentions else None
+    span.signal_tags = signal_tags(span.quote)
+    return span
+
+
+def signal_tags(text: str) -> list[str]:
+    tags = []
+    if _NEGATION_SIGNAL.search(text):
+        tags.append("negation")
+    if _EXCEPTION_SIGNAL.search(text):
+        tags.append("exception")
+    if _NUMBER_SIGNAL.search(text):
+        tags.append("numeric")
+    return tags
+
+
+def chunk_source(source: Source, max_bytes: int = 1800) -> list[Span]:
+    """Create byte-exact, independently indexable passage spans for long sources."""
+    if not 256 <= max_bytes <= 2048:
+        raise ValueError("source chunk size must be between 256 and 2048 UTF-8 bytes")
+    text = source.content
+    if len(text.encode("utf-8")) <= max_bytes:
+        return []
+    spans = []
+    start = 0
+    while start < len(text):
+        end = start
+        size = 0
+        while end < len(text):
+            width = len(text[end].encode("utf-8"))
+            if size + width > max_bytes:
+                break
+            size += width
+            end += 1
+        if end == start:
+            end += 1
+        if end < len(text):
+            # Prefer a paragraph/sentence boundary near the end of the byte budget.
+            floor = max(start + 1, end - max(32, (end - start) // 4))
+            boundary = max((text.rfind(mark, floor, end) for mark in ("\n\n", "\n", "。", "！", "？", ". ", "! ", "? ")))
+            if boundary >= floor:
+                end = boundary + (2 if text[boundary:boundary + 2] in {"\n\n", ". ", "! ", "? "} else 1)
+        quote = text[start:end]
+        byte_start = len(text[:start].encode("utf-8"))
+        byte_end = byte_start + len(quote.encode("utf-8"))
+        span = Span(stable_id(source.id, byte_start, byte_end), source.id, byte_start, byte_end,
+                    hashlib.sha256(quote.encode("utf-8")).hexdigest(), quote)
+        spans.append(annotate_span(span))
+        start = end
+    return spans
 
 
 @dataclass

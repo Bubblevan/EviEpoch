@@ -11,7 +11,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from .config import Settings
-from .domain import IngestBusy, InvalidExtraction, Obligation, QueryPlan, Source, digest, namespace, stable_id, timestamp
+from .domain import (IngestBusy, InvalidExtraction, Obligation, PublishConflict, QueryPlan, Source,
+                     annotate_span, chunk_source, digest, namespace, stable_id, timestamp)
 from .ingest.extraction import parse_plan, validate_extraction
 from .manage import reconcile
 from .manage.temporal import verify_changes
@@ -105,6 +106,17 @@ def _split_batch(batch):
                            "extraction_char_start": start + left, "extraction_char_end": start + right})
         result.append([(source, fragment)])
     return result
+
+
+def _span_representation(span):
+    # Keep each passage under the embedding provider's segmentation threshold so
+    # it receives one vector instead of a pooled representation.
+    return span.quote
+
+
+def _source_representation(source):
+    rendered = source.render()
+    return rendered if len(rendered.encode("utf-8")) <= 2048 else source.content
 
 
 
@@ -249,15 +261,31 @@ class MemoryPipeline:
                 # model-derived facts, spans, relations, or governance decisions.
                 spans, nodes, edges, policies = [], [], [], []
                 log_ingest_degraded(error=exc, source_count=len(sources))
-            representations = {s.id: s.render() for s in sources}
-            representations.update({n.id: n.representation() for n in nodes})
-            values = self.providers.embed(list(representations.values()))
-            if values.shape != (len(representations), self.config.embed_dimensions):
-                raise ValueError("embedding response shape does not match objects")
-            vectors = dict(zip(representations, values))
-            self.store.publish(ns, request.request_id, owner, sources, spans, nodes, edges, policies, vectors,
-                               partial(reconcile, consolidate=self.config.consolidation_enabled,
-                                       reflect=self.config.reflection_enabled))
+            spans = list({span.id: span for span in
+                          [annotate_span(span) for span in spans] + [span for source in sources
+                           for span in chunk_source(source, self.config.source_chunk_bytes)]}.values())
+            for attempt in range(3):
+                base_generation, prepared_nodes, prepared_edges, missing_node_vectors = self.store.prepare_publish(
+                    ns, nodes, edges, partial(reconcile, consolidate=self.config.consolidation_enabled,
+                                              reflect=self.config.reflection_enabled))
+                chunked_sources = {source.id for source in sources
+                                   if len(source.content.encode("utf-8")) > self.config.source_chunk_bytes}
+                representations = {s.id: _source_representation(s) for s in sources if s.id not in chunked_sources}
+                representations.update({span.id: _span_representation(span) for span in spans
+                                        if len(span.quote.encode("utf-8")) <= self.config.source_chunk_bytes})
+                representations.update({n.id: n.representation() for n in prepared_nodes
+                                        if n.id in missing_node_vectors})
+                values = self.providers.embed(list(representations.values()))
+                if values.shape != (len(representations), self.config.embed_dimensions):
+                    raise ValueError("embedding response shape does not match objects")
+                vectors = dict(zip(representations, values))
+                try:
+                    self.store.publish(ns, request.request_id, owner, sources, spans, prepared_nodes,
+                                       prepared_edges, policies, vectors, base_generation)
+                    break
+                except PublishConflict:
+                    if attempt == 2:
+                        raise IngestBusy("namespace kept changing while preparing derived indexes; retry Add")
             return echo
         except BaseException:
             if owner is not None:
@@ -303,7 +331,12 @@ class MemoryPipeline:
                 trace.setdefault("timings_ms", {})["planning"] = planning_ms
                 trace["timings_ms"].update(view.timings_ms)
                 response = {"data": [{"id": e.id, "content": e.content, "score": float(e.score),
-                                      **({"created_at": e.created_at} if e.created_at else {})} for e in chosen]}
+                                      **({"created_at": e.created_at} if e.created_at else {}),
+                                      **({"source_id": e.source_id,
+                                          "source_spans": list(e.source_spans),
+                                          "source_ranges": [list(r) for r in e.source_ranges],
+                                          "source_paragraphs": list(e.source_paragraphs)}
+                                         if e.source_ranges else {})} for e in chosen]}
                 # Linearization point: no model work or response construction holds this lock.
                 # A concurrent publish (including forget) invalidates the entire optimistic read.
                 with self.store.view(ns) as current:

@@ -29,12 +29,17 @@ def _bool(name: str, default: bool) -> bool:
 class Settings:
     db_path: str = "./data/eviepoch-v1.sqlite3"
     database_url: str = ""
+    allow_sqlite: bool = True
+    source_chunk_bytes: int = 1800
+    pg_hnsw_ef_search: int = 100
+    pg_hnsw_max_scan_tuples: int = 20000
     profile: str = "full"
     model_policy: str = "competition"
     selector: str = "beam"
     candidate_limit: int = 120
     graph_depth: int = 3
     graph_budget: int = 512
+    graph_retrieval_enabled: bool = True
     beam_width: int = 12
     gap_iterations: int = 1
     relations_enabled: bool = True
@@ -42,7 +47,14 @@ class Settings:
     reflection_enabled: bool = True
     proof_binding_enabled: bool = True
     workbench_enabled: bool = False
-    rerank_url: str = ""
+    rerank_enabled: bool = True
+    rerank_url: str = "http://127.0.0.1:8090/rerank"
+    rerank_timeout_seconds: float = 20.0
+    rerank_candidate_limit: int = 120
+    rerank_category_quota: int = 8
+    rerank_segment_chars: int = 4000
+    rerank_max_segments: int = 3
+    rerank_model_path: str = "./models/Qwen3-Reranker-0.6B"
     add_concurrency: int = 16
     search_concurrency: int = 32
     extraction_chars: int = 24000
@@ -86,16 +98,30 @@ class Settings:
     coverage_source_limit: int = 32
 
     @classmethod
-    def from_env(cls) -> "Settings":
+    def from_env(cls, *, require_postgres: bool = True) -> "Settings":
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(override=False)
+        except ImportError:
+            pass
+        database_url = os.getenv("EPOCH_DATABASE_URL", "").strip()
+        allow_sqlite = os.getenv("EPOCH_ALLOW_SQLITE", "").strip().lower() in {"1", "true", "yes", "on"}
+        if require_postgres and not database_url and not allow_sqlite:
+            raise ValueError("EPOCH_DATABASE_URL is required; set EPOCH_ALLOW_SQLITE=1 only for local verification")
         return cls(
             db_path=os.getenv("EPOCH_DB_PATH", "./data/eviepoch-v1.sqlite3"),
-            database_url=os.getenv("EPOCH_DATABASE_URL", ""),
+            database_url=database_url,
+            allow_sqlite=allow_sqlite,
+            source_chunk_bytes=_int("EPOCH_SOURCE_CHUNK_BYTES", 1800),
+            pg_hnsw_ef_search=_int("EPOCH_PG_HNSW_EF_SEARCH", 100),
+            pg_hnsw_max_scan_tuples=_int("EPOCH_PG_HNSW_MAX_SCAN_TUPLES", 20000),
             profile=os.getenv("EPOCH_PROFILE", "full"),
             model_policy=os.getenv("EPOCH_MODEL_POLICY", "competition"),
             selector=os.getenv("EPOCH_SELECTOR", "beam"),
             candidate_limit=_int("EPOCH_CANDIDATE_LIMIT", 120),
             graph_depth=_int("EPOCH_GRAPH_DEPTH", 3),
             graph_budget=_int("EPOCH_GRAPH_BUDGET", 512),
+            graph_retrieval_enabled=_bool("EPOCH_GRAPH_RETRIEVAL_ENABLED", True),
             beam_width=_int("EPOCH_BEAM_WIDTH", 12),
             gap_iterations=_int("EPOCH_GAP_ITERATIONS", 1),
             relations_enabled=_bool("EPOCH_RELATIONS", True),
@@ -103,7 +129,14 @@ class Settings:
             reflection_enabled=_bool("EPOCH_REFLECTION", True),
             proof_binding_enabled=_bool("EPOCH_PROOF_BINDING", True),
             workbench_enabled=_bool("EPOCH_WORKBENCH", False),
-            rerank_url=os.getenv("EPOCH_RERANK_URL", ""),
+            rerank_enabled=_bool("EPOCH_RERANK_ENABLED", True),
+            rerank_url=os.getenv("EPOCH_RERANK_URL", "").strip() or "http://127.0.0.1:8090/rerank",
+            rerank_timeout_seconds=_float("EPOCH_RERANK_TIMEOUT_SECONDS", 20.0),
+            rerank_candidate_limit=_int("EPOCH_RERANK_CANDIDATE_LIMIT", 120),
+            rerank_category_quota=_int("EPOCH_RERANK_CATEGORY_QUOTA", 8),
+            rerank_segment_chars=_int("EPOCH_RERANK_SEGMENT_CHARS", 4000),
+            rerank_max_segments=_int("EPOCH_RERANK_MAX_SEGMENTS", 3),
+            rerank_model_path=os.getenv("EPOCH_RERANK_MODEL_PATH", "./models/Qwen3-Reranker-0.6B"),
             add_concurrency=_int("EPOCH_ADD_CONCURRENCY", 16),
             search_concurrency=_int("EPOCH_SEARCH_CONCURRENCY", 32),
             extraction_chars=_int("EPOCH_EXTRACTION_CHARS", 24000),
@@ -152,6 +185,11 @@ class Settings:
         return bool(self.llm_api_key)
 
     def validate(self) -> None:
+        if not self.database_url and not self.allow_sqlite:
+            raise ValueError("EPOCH_DATABASE_URL is required; SQLite must be explicitly enabled for local verification")
+        if (not 256 <= self.source_chunk_bytes <= 2048 or self.pg_hnsw_ef_search < 1
+                or self.pg_hnsw_max_scan_tuples < self.pg_hnsw_ef_search):
+            raise ValueError("Invalid source chunk or PostgreSQL HNSW search budget")
         if (not 0 <= self.search_consistency_retries <= 4 or not 256 <= self.binder_window_chars <= 16000
                 or not 1 <= self.coverage_source_limit <= 128):
             raise ValueError("Invalid consistency, window or coverage budget")
@@ -186,6 +224,13 @@ class Settings:
                 or self.token_safety < 1 or not math.isfinite(self.request_timeout)
                 or self.request_timeout <= 0):
             raise ValueError("Token safety, item cost, or request timeout is invalid")
+        if not math.isfinite(self.rerank_timeout_seconds) or self.rerank_timeout_seconds <= 0:
+            raise ValueError("Reranker timeout must be a finite positive number")
+        if not 1 <= self.rerank_candidate_limit <= 256:
+            raise ValueError("Reranker candidate limit must be between 1 and 256")
+        if (self.rerank_category_quota <= 0 or not 1 <= self.rerank_segment_chars <= 32000
+                or not 1 <= self.rerank_max_segments <= 8):
+            raise ValueError("Invalid reranker category quota or text segmentation settings")
         if not self.embed_api_key or not self.embed_base_url:
             raise ValueError("Set EPOCH_EMBED_API_KEY and EPOCH_EMBED_BASE_URL")
         parts = urlsplit(self.embed_base_url)
@@ -199,3 +244,9 @@ class Settings:
                     or parts.username is not None or parts.password is not None
                     or parts.query or parts.fragment):
                 raise ValueError("EPOCH_LLM_BASE_URL must be HTTP(S) without credentials, query, or fragment")
+        if self.rerank_enabled and self.rerank_url:
+            parts = urlsplit(self.rerank_url)
+            if (parts.scheme.lower() not in {"http", "https"} or not parts.hostname
+                    or parts.username is not None or parts.password is not None
+                    or parts.query or parts.fragment):
+                raise ValueError("EPOCH_RERANK_URL must be HTTP(S) without credentials, query, or fragment")

@@ -27,7 +27,8 @@ def apply_policy(c, ns: str, policy: Governance, generation: int):
     for oid in impacted:
         detach(c, ns, oid, targets)
         if policy.action == "erase":
-            for table, column in (("ee_postings", "object_id"), ("ee_vectors", "id"),
+            for table, column in (("ee_postings", "object_id"), ("ee_entity_mentions", "object_id"),
+                                  ("ee_vectors", "id"),
                                   ("ee_edges", "id"), ("ee_objects", "id"),
                                   ("ee_dependencies", "object_id"), ("ee_provenance", "id"), ("ee_versions", "id")):
                 c.execute(f"DELETE FROM {table} WHERE ns=? AND {column}=?", (ns, oid))

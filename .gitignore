@@ -12,3 +12,6 @@ experiments/private-runs/
 references/
 *.pdf
 /logs/
+literature/reference/
+models/Qwen3-Reranker-0.6B/
+models/hfd.sh

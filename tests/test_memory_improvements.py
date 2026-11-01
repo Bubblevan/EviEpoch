@@ -1,10 +1,12 @@
 """Independent synthetic controls. No private evaluation content or quality claims."""
 import copy
 import json
+import sqlite3
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -16,6 +18,7 @@ from eviepoch.ingest.temporal import message_anchor, relative_bounds
 from eviepoch.manage.temporal import project_query_state
 from eviepoch.providers import Providers, ProviderUnavailable, StructuredOutputInvalid
 from eviepoch.retrieval.windows import context_windows
+from eviepoch.storage.repository import Repository, View
 
 
 def triple(subject, relation, value, sid, rid, vid, update=False):
@@ -25,6 +28,151 @@ def triple(subject, relation, value, sid, rid, vid, update=False):
 
 
 class ImprovementControls(fixtures.LifecycleTests):
+    def test_graph_recall_finds_a_two_hop_path_before_vector_or_keyword_candidates(self):
+        rows = [
+            ("Alice joined Project X.", fixtures.fact("Alice joined Project X.", "Project X",
+                                                        subject="Alice", predicate="joined project")),
+            ("Project X uses Database Y.", fixtures.fact("Project X uses Database Y.", "Database Y",
+                                                           subject="Project X", predicate="uses database")),
+            ("Database Y was replaced by Database Z.", fixtures.fact(
+                "Database Y was replaced by Database Z.", "Database Z", subject="Database Y",
+                predicate="replaced by database")),
+        ]
+        for index, (content, node) in enumerate(rows):
+            self.add(content, [node], rid=f"entity-path-{index}")
+        for index in range(30):
+            content = f"Alice mentioned unrelated preference {index}."
+            self.add(content, [fixtures.fact(content, f"preference-{index}", subject="Alice",
+                                             predicate="unrelated preference")], rid=f"entity-decoy-{index}")
+        self.provider.plan_value = {"intents": ["fact"], "entities": [], "attributes": [],
+                                    "obligations": [{"query": "Which database replaced the one used by Alice's project?"}]}
+        self.pipeline.config = replace(self.config, candidate_limit=16, graph_depth=2,
+                                       graph_retrieval_enabled=True, rerank_enabled=False)
+        with patch.object(View, "dense", lambda _view, _vector, _limit: {}), \
+                patch.object(View, "lexical", lambda _view, _query, _limit: {}):
+            _response, trace = self.pipeline.search_with_trace(SearchRequest(
+                "Which database replaced the one used by Alice's project?", "u", 5))
+        nodes = self.inspect()["nodes"]
+        terminal = next(node for node in nodes if node["subject"] == "Database Y")
+        self.assertGreater(trace["retrieval_channels"]["graph"], 3)
+        self.assertEqual(trace["channel_ranks"][terminal["id"]]["graph_rank"], 3)
+
+    def test_graph_recall_does_not_join_conflicting_explicit_entity_ids_by_label(self):
+        root = json.dumps({"subject": "Orion", "relation": "owns project", "object": "Project X",
+                           "subject_id": "company-1", "relation_id": "owns-project",
+                           "object_id": "project-x-1"})
+        conflicting = json.dumps({"subject": "Project X", "relation": "uses database", "object": "Database Y",
+                                  "subject_id": "project-x-2", "relation_id": "uses-database",
+                                  "object_id": "database-y"})
+        self.add(root, rid="graph-id-root")
+        self.add(conflicting, rid="graph-id-conflict")
+        self.provider.plan_value = {"intents": ["fact"], "entities": ["Orion"], "attributes": [],
+                                    "obligations": [{"query": "Orion project database"}]}
+        self.pipeline.config = replace(self.config, graph_depth=2, graph_retrieval_enabled=True,
+                                       rerank_enabled=False)
+        with patch.object(View, "dense", lambda _view, _vector, _limit: {}), \
+                patch.object(View, "lexical", lambda _view, _query, _limit: {}):
+            _response, trace = self.pipeline.search_with_trace(SearchRequest("Orion", "u", 5))
+        self.assertEqual(trace["retrieval_channels"]["graph"], 1)
+        self.assertNotIn("graph_rank", trace["channel_ranks"].get(
+            next(node["id"] for node in self.inspect()["nodes"] if node["value"] == "Database Y"), {}))
+
+    def test_temporal_validity_uses_the_full_inclusive_interval(self):
+        quote = "The membership was active during 2020."
+        self.add(quote, [fixtures.fact(quote, "active", valid_date="2020", time_quote="2020")],
+                 rid="valid-interval")
+        with self.pipeline.store.view(namespace("u")) as view:
+            active_midyear = view.temporal("2020-06-01", 10, mode="valid")
+            after_interval = view.temporal("2021-01-01", 10, mode="valid")
+        self.assertTrue(active_midyear)
+        self.assertFalse(after_interval)
+
+    def test_as_of_projection_keeps_future_end_and_does_not_use_assertion_as_validity(self):
+        source_id = "temporal-projection-source"
+        interval = Node("future-end", "fact", "member", "status", "active", [source_id], [],
+                        valid_time=TimeBounds.parse("2020"))
+        unknown_validity = Node("unknown-validity", "fact", "member", "location", "Harbor",
+                                [source_id], [], asserted_at="2030-01-01T00:00:00+00:00")
+        snapshot = Snapshot(1, 1, {}, {interval.id: interval, unknown_validity.id: unknown_validity}, [])
+        within_interval = project_query_state(
+            snapshot, QueryPlan(intents=["as_of"], as_of=TimeBounds.parse("2020-06-01")))
+        after_interval = project_query_state(
+            snapshot, QueryPlan(intents=["as_of"], as_of=TimeBounds.parse("2021-01-01")))
+        self.assertIn(interval.id, within_interval.nodes)
+        self.assertIn(unknown_validity.id, within_interval.nodes)
+        self.assertNotIn(interval.id, after_interval.nodes)
+
+    def test_legacy_sqlite_migration_does_not_relabel_message_time_as_validity(self):
+        path = Path(self.temp.name) / "legacy.sqlite3"
+        source = Source("legacy-source", namespace("u"), "legacy-request", "s", 0, "user",
+                        "A plain statement with no date mention.", "2020-01-02T00:00:00+00:00",
+                        "2026-11-02T00:00:00+00:00")
+        with sqlite3.connect(path) as conn:
+            conn.execute("CREATE TABLE ee_metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL)")
+            conn.execute("INSERT INTO ee_metadata VALUES('schema_version','2')")
+            conn.execute("CREATE TABLE ee_objects(ns TEXT NOT NULL,id TEXT NOT NULL,kind TEXT NOT NULL,payload TEXT NOT NULL,"
+                         "body TEXT NOT NULL,asserted_at TEXT,generation INTEGER NOT NULL,active INTEGER NOT NULL,"
+                         "subject_key TEXT NOT NULL,predicate_key TEXT NOT NULL,scope_key TEXT NOT NULL,"
+                         "valid_start TEXT,valid_end TEXT,length INTEGER NOT NULL,PRIMARY KEY(ns,id))")
+            conn.execute("INSERT INTO ee_objects VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         (namespace("u"), source.id, "source", json.dumps(source.__dict__), source.content,
+                          source.asserted_at, 1, 1, "", "", "", "2020-01-02", None, 7))
+        conn.close()
+        repo = Repository(replace(self.config, db_path=str(path)), self.provider.embedding_identity())
+        repo.open()
+        try:
+            with repo.view(namespace("u")) as view:
+                row = view.c.execute("SELECT valid_start,valid_end,mention_start,asserted_at,stored_at "
+                                     "FROM ee_objects WHERE ns=? AND id=?",
+                                     (namespace("u"), source.id)).fetchone()
+            self.assertEqual(row, (None, None, None, source.asserted_at, source.stored_at))
+        finally:
+            repo.close()
+
+    def test_occurrence_and_valid_time_are_separate_and_indexed(self):
+        quote = "Alice joined Acme on 2020-02-03; the agreement is valid from 2021."
+        self.add(quote, [fixtures.fact(quote, "joined", predicate="employment event", kind="event",
+                                     event_date="2020-02-03", time_quote="2020-02-03", valid_date="2021")],
+                 rid="separate-clocks", timestamp=1577836800000)
+        with self.pipeline.store.view(namespace("u")) as view:
+            row = view.c.execute("SELECT valid_start,valid_end,occurrence_start,occurrence_end,mention_start,"
+                                 "asserted_at,stored_at FROM ee_objects WHERE ns=? AND kind='event'",
+                                 (namespace("u"),)).fetchone()
+            source_mention = view.c.execute("SELECT mention_start FROM ee_objects WHERE ns=? AND kind='source'",
+                                            (namespace("u"),)).fetchone()[0]
+            occurrence = view.temporal("2020-02-03", 10, mode="occurrence")
+            valid = view.temporal("2020-02-03", 10, mode="valid")
+        self.assertEqual(row[0:4], ("2021-01-01", "2021-12-31", "2020-02-03", "2020-02-03"))
+        self.assertIsNone(row[4])
+        self.assertEqual(source_mention, "2020-02-03")
+        self.assertTrue(row[5])
+        self.assertTrue(row[6])
+        self.assertTrue(occurrence)
+        self.assertFalse(valid)
+
+    def test_relative_event_query_uses_occurrence_channel_without_as_of(self):
+        quote = "Alice joined Acme on 2020-02-03."
+        self.add(quote, [fixtures.fact(quote, "joined", predicate="Acme employment", kind="event",
+                                     event_date="2020-02-03", time_quote="2020-02-03")],
+                 rid="relative-event", timestamp=1577836800000)
+        self.provider.plan_value = {"intents": ["fact"], "as_of": None,
+                                    "obligations": [{"query": "Alice joined Acme"}]}
+        calls = []
+        original = View.temporal
+
+        def tracked(view, date, limit, **kwargs):
+            calls.append((date, kwargs.get("mode")))
+            return original(view, date, limit, **kwargs)
+
+        with patch.object(View, "temporal", tracked):
+            self.pipeline.search(SearchRequest(
+                "How many months after joining Acme did Alice move to Boston?", "u", 5))
+        self.assertIn((None, "occurrence"), calls)
+        calls.clear()
+        with patch.object(View, "temporal", tracked):
+            self.pipeline.search(SearchRequest("Where does Alice live?", "u", 5))
+        self.assertFalse(any(mode == "occurrence" for _date, mode in calls))
+
     def test_query_plan_prompt_uses_single_supported_order_axis(self):
         self.assertIn('"order_by":"event"', PLAN_PROMPT)
         self.assertIn("Set order_by to exactly one of event, first_mention, or record.", PLAN_PROMPT)

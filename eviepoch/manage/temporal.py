@@ -73,10 +73,18 @@ def project_query_state(snapshot, plan):
               if "current" in plan.intents and n.modality in {"planned", "hypothetical"}}
     if plan.as_of.latest:
         for node in snapshot.nodes.values():
-            boundary = node.valid_time.earliest
-            if not boundary and node.subject_id and node.predicate_id:
-                boundary = (node.asserted_at or "")[:10]
-            if boundary and boundary > plan.as_of.latest:
+            lower = plan.as_of.earliest or plan.as_of.latest
+            valid_start, valid_end = node.valid_time.earliest, node.valid_time.latest
+            outside_valid_interval = bool(
+                valid_start and valid_start > plan.as_of.latest
+                or valid_end and valid_end < lower)
+            # Assertion time is a separate knowledge clock. Use it as a conservative
+            # transition boundary only for explicit state changes with no valid time.
+            late_state_change = bool(
+                not valid_start and not valid_end
+                and node.change in {"change", "correction", "retraction"}
+                and node.asserted_at and node.asserted_at[:10] > plan.as_of.latest)
+            if outside_valid_interval or late_state_change:
                 hidden.add(node.id)
     for edge in snapshot.edges:
         if historical:
@@ -87,8 +95,13 @@ def project_query_state(snapshot, plan):
         if origin is None or origin.modality in {"planned", "hypothetical"}:
             continue
         if plan.as_of.latest:
-            boundary = origin.valid_time.earliest or (origin.asserted_at or "")[:10]
-            if not boundary or boundary > plan.as_of.latest:
+            lower = plan.as_of.earliest or plan.as_of.latest
+            start, end = origin.valid_time.earliest, origin.valid_time.latest
+            if start or end:
+                outside = bool(start and start > plan.as_of.latest or end and end < lower)
+                if outside:
+                    continue
+            elif not origin.asserted_at or origin.asserted_at[:10] > plan.as_of.latest:
                 continue
         hidden.add(edge.target)
     if not hidden:

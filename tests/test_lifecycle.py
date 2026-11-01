@@ -185,6 +185,43 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(summary["protected"])
         self.assertEqual(len(summary["source_ids"]), 2)
         self.assertEqual(len(data["sources"]), 2)
+        index_metrics = self.pipeline.store.summary_index_metrics(namespace("u"))
+        self.assertEqual(index_metrics["summary_count"], 1)
+        self.assertEqual(index_metrics["summary_with_vector_count"], 1)
+        self.assertEqual(index_metrics["summary_lexical_hit_rate"], 1.0)
+
+    def test_long_sources_have_independent_bounded_span_indexes(self):
+        paragraphs = [
+            "General project context " + ("routine background details " * 100),
+            "On 2024-05-01 the reimbursement limit is 2500 CNY. " + ("ordinary policy wording " * 80),
+            "Exception: meals are not reimbursed unless the director approves them. " + ("review note " * 70),
+        ]
+        content = "\n\n".join(paragraphs)
+        self.add(content)
+        stored = self.inspect()
+        spans = stored["spans"]
+        self.assertGreaterEqual(len(spans), 3)
+        raw = content.encode("utf-8")
+        self.assertTrue(all(len(span["quote"].encode("utf-8")) <= self.config.source_chunk_bytes
+                            for span in spans))
+        self.assertTrue(all(raw[span["byte_start"]:span["byte_end"]].decode() == span["quote"]
+                            for span in spans))
+        indexed = [span for span in spans if "Exception" in span["quote"]]
+        self.assertTrue(indexed)
+        self.assertIn("exception", indexed[0]["signal_tags"])
+        self.assertIn("negation", indexed[0]["signal_tags"])
+        self.assertIn("2500", content)
+        self.assertTrue(any(span["temporal_start"] == "2024-05-01" for span in spans))
+        with self.pipeline.store.transaction(namespace("u")) as conn:
+            for span in spans:
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM ee_vectors WHERE ns=? AND id=?",
+                                              (namespace("u"), span["id"])).fetchone()[0], 1)
+            source_id = stored["sources"][0]["id"]
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM ee_vectors WHERE ns=? AND id=?",
+                                          (namespace("u"), source_id)).fetchone()[0], 0)
+        with self.pipeline.store.view(namespace("u")) as view:
+            lexical_ids = view.lexical("director approves reimbursement exception", 10)
+            self.assertTrue(any(span["id"] in lexical_ids for span in spans))
 
     def _forget(self, action="suppress"):
         instruction = "Please forget my Kyoto address."

@@ -1,0 +1,14 @@
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 EPOCH_RERANK_MODEL_PATH=/model
+WORKDIR /srv
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+COPY requirements-reranker.txt .
+RUN pip install -r requirements-reranker.txt
+COPY eviepoch ./eviepoch
+EXPOSE 8090
+HEALTHCHECK --interval=30s --timeout=5s --start-period=180s \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=4)"
+CMD ["uvicorn", "eviepoch.providers.reranker_service:app", "--host", "0.0.0.0", "--port", "8090", "--workers", "1"]

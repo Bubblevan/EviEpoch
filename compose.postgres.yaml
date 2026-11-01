@@ -1,15 +1,30 @@
 services:
+  reranker:
+    build:
+      context: .
+      dockerfile: Dockerfile.reranker
+    environment:
+      EPOCH_RERANK_MODEL_PATH: /model
+      EPOCH_RERANK_BATCH_SIZE: ${EPOCH_RERANK_BATCH_SIZE:-8}
+    ports:
+      - "${EPOCH_RERANK_BIND:-127.0.0.1}:${EPOCH_RERANK_PORT:-8090}:8090"
+    volumes:
+      - ${EPOCH_RERANK_MODEL_PATH:-./models/Qwen3-Reranker-0.6B}:/model:ro
+    restart: unless-stopped
+
   postgres:
     image: pgvector/pgvector:0.8.1-pg17
     environment:
       POSTGRES_DB: eviepoch
       POSTGRES_USER: eviepoch_admin
-      POSTGRES_PASSWORD: ${EPOCH_POSTGRES_PASSWORD:-local-admin-development-only}
+      POSTGRES_PASSWORD: ${EPOCH_POSTGRES_PASSWORD:?Set EPOCH_POSTGRES_PASSWORD in .env}
+      EPOCH_APP_DB_PASSWORD: ${EPOCH_APP_DB_PASSWORD:?Set EPOCH_APP_DB_PASSWORD in .env}
     ports:
       - "127.0.0.1:${EPOCH_POSTGRES_PORT:-54329}:5432"
     volumes:
       - eviepoch-postgres:/var/lib/postgresql/data
-      - ./deploy/init.sql:/docker-entrypoint-initdb.d/10-roles.sql:ro
+      - ./deploy/init-db.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+      - ./deploy/init.sql:/docker-entrypoint-initdb.d/10-roles.template:ro
     healthcheck:
       test: [CMD-SHELL, "pg_isready -U eviepoch_admin -d eviepoch"]
       interval: 5s
@@ -22,7 +37,8 @@ services:
       - path: ${EPOCH_ENV_FILE:-.env}
         required: false
     environment:
-      EPOCH_ADMIN_DATABASE_URL: postgresql://eviepoch_admin:${EPOCH_POSTGRES_PASSWORD:-local-admin-development-only}@postgres:5432/eviepoch
+      EPOCH_ADMIN_DATABASE_URL: postgresql://eviepoch_admin:${EPOCH_POSTGRES_PASSWORD:?Set EPOCH_POSTGRES_PASSWORD in .env}@postgres:5432/eviepoch
+      EPOCH_APP_DB_PASSWORD: ${EPOCH_APP_DB_PASSWORD:?Set EPOCH_APP_DB_PASSWORD in .env}
     command: [python, -m, eviepoch.migrate]
     depends_on:
       postgres:
@@ -35,13 +51,21 @@ services:
         required: false
     environment:
       EPOCH_PROFILE: full
-      EPOCH_DATABASE_URL: postgresql://eviepoch_app:local-development-only@postgres:5432/eviepoch
+      EPOCH_DATABASE_URL: postgresql://eviepoch_app:${EPOCH_APP_DB_PASSWORD:?Set EPOCH_APP_DB_PASSWORD in .env}@postgres:5432/eviepoch
+      EPOCH_PG_HNSW_EF_SEARCH: ${EPOCH_PG_HNSW_EF_SEARCH:-100}
+      EPOCH_PG_HNSW_MAX_SCAN_TUPLES: ${EPOCH_PG_HNSW_MAX_SCAN_TUPLES:-20000}
+      EPOCH_SOURCE_CHUNK_BYTES: ${EPOCH_SOURCE_CHUNK_BYTES:-1800}
       EPOCH_WORKBENCH: "0"
+      EPOCH_RERANK_ENABLED: ${EPOCH_RERANK_ENABLED:-1}
+      EPOCH_RERANK_URL: http://reranker:8090/rerank
+      EPOCH_RERANK_TIMEOUT_SECONDS: ${EPOCH_RERANK_TIMEOUT_SECONDS:-20}
     ports:
       - "${EPOCH_BIND:-127.0.0.1}:${EPOCH_PORT:-8012}:8000"
     depends_on:
       migrate:
         condition: service_completed_successfully
+      reranker:
+        condition: service_started
     restart: unless-stopped
 volumes:
   eviepoch-postgres:

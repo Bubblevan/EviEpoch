@@ -52,19 +52,43 @@ $env:TIKTOKEN_CACHE_DIR = "$PWD\.cache\tiktoken"
 .venv\Scripts\python.exe -m uvicorn eviepoch.api:app --env-file .env --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
+Search 默认启用独立 Qwen3-Reranker-0.6B sidecar。模型权重位于 `models/Qwen3-Reranker-0.6B`，用 Compose 启动应用与重排服务：
+
+```powershell
+docker compose up -d --build
+```
+
+本机直接运行 API 时，可只启动 sidecar 并保持默认的 `http://127.0.0.1:8090/rerank` 地址：
+
+```powershell
+docker compose up -d --build reranker
+```
+
+重排请求有独立超时，默认最多评分 120 个候选；服务未就绪或调用失败时，Search 记录降级状态并继续使用 fused 候选分数。
+
 `full` 不会因模型失败而静默切换成 raw-only。不同 payload 重用 request_id 返回 409；未提交、容量满或模型故障不会返回成功。
 
 ## PostgreSQL 部署
 
 ```powershell
-docker compose -f compose.postgres.yaml -p eviepoch up -d --build
+Copy-Item .env.example .env
+# Set EPOCH_POSTGRES_PASSWORD and EPOCH_APP_DB_PASSWORD to URL-safe secrets in .env.
+docker compose up -d --build
 ```
 
-Compose 启动 PostgreSQL/pgvector、独立迁移进程与 API；服务使用非 owner、非 superuser、无 BYPASSRLS 的角色，每个事务设置 namespace。DDL 只由迁移角色执行。Compose 内置凭据仅供本机开发，正式环境由部署方配置独立凭据和 HTTPS 网关。
+标准 Compose 启动 PostgreSQL/pgvector、独立迁移进程、Reranker 与 API；正式运行必须提供 PostgreSQL URL，服务使用非 owner、非 superuser、无 BYPASSRLS 的角色，每个事务设置 namespace。DDL 只由迁移角色执行。SQLite 只作为显式本地验证后端；直接运行 API 时须设置 `EPOCH_ALLOW_SQLITE=1` 才能无 PG 启动。
 
-默认 PostgreSQL 向量检索在数据库内按 namespace 精确计算；BM25 也在数据库内聚合。当前未部署 HNSW、连接池、Redis 或生产备份治理，不据此声称 300M tokens 或 64 Add/256 Search 容量已通过。SQLite 后端供本地验证，Search 仍会做本用户向量精确扫描。
+迁移把 `ee_vectors` 按 `ns` 哈希分为 32 个分区，并在每个分区建立 HNSW cosine 索引。Dense 查询使用 namespace 分区裁剪、严格顺序 iterative scan 与有界扫描参数；BM25 在数据库内聚合。实体提及与显式关系路径另作图召回臂，在首轮 Top-N 截断前与 Dense/BM25/Temporal 经 RRF 合流；同名关联只用于候选导航，有明确且不一致的实体 ID 时不跨接。PG17 + pgvector 0.8.1 的临时数据库已通过 31 项集成测试和分区/HNSW catalog 检查。HNSW 是近似索引，召回/延迟及生产容量仍未做专项基准测试；不据此声称 300M tokens 或 64 Add/256 Search 容量已通过。SQLite Search 保留精确扫描，仅用于本地验证。
 
-原 SQLite 基线库不自动冒充精确来源库：旧展示字符串已丢失的空白或 role 无法恢复。新库默认 `eviepoch-v1.sqlite3`；参赛数据应从合法原始输入重新导入。
+Summary 在写事务前完成巩固与向量计算，发布时以 generation 校验后原子写入。长消息保存精确 UTF-8 Span，并为每段建立独立词法/向量索引；Dense/Lexical 通道对同一 Source 最多保留 3 个 Span，再由来源证据和规则打包路径做最终选择。查看某用户命名空间的 Summary 索引实况：
+
+```powershell
+.\.venv\Scripts\python.exe -m eviepoch.storage.summary_metrics --user-id <user-id>
+```
+
+输出 `summary_count`、`summary_with_vector_count` 和 `summary_lexical_hit_rate`；词法命中率定义为至少有一个 postings term 的活跃 Summary 占比，无 Summary 时返回 `null`。该命令直接查询配置的 SQLite 或 PostgreSQL，不使用模拟指标。
+
+原 SQLite 基线库不自动冒充精确来源库：旧展示字符串已丢失的空白或 role 无法恢复；参赛数据应从合法原始输入重新导入。
 
 ## 接口
 

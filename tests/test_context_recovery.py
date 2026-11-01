@@ -26,14 +26,15 @@ class ContextRecoveryControls(fixtures.LifecycleTests):
         self.assertIn('false', str(response))
         self.provider.repair_disclosure.assert_called_once()
 
-    def test_uncertain_answer_with_audited_partial_support_is_not_unavailability(self):
+    def test_empty_binding_reuses_local_proof_before_partial_fallback(self):
         self.add('The telescope calibration tolerance is not yet resolved.')
         self.provider.bind_obligations = lambda q, p, snap: {'obligations': [
             {'id': o.id, 'alternatives': []} for o in p.obligations]}
         self.provider.audit_evidence = lambda q, p, sources: {'status': 'uncertain', 'ids': list(sources)}
         response, trace = self.pipeline.search_with_trace(SearchRequest('telescope tolerance', 'u', 5))
         self.assertTrue(response['data'])
-        self.assertEqual(trace['selection_status'], 'uncertain_fallback')
+        self.assertEqual(trace['selection_status'], 'proof_selected')
+        self.assertEqual(trace['binding_status'], 'empty')
         self.provider.audit_evidence = lambda q, p, sources: {'status': 'uncertain', 'ids': []}
         with self.assertRaises(ProviderUnavailable):
             self.pipeline.search(SearchRequest('telescope tolerance', 'u', 5))
@@ -167,15 +168,45 @@ class ContextRecoveryControls(fixtures.LifecycleTests):
         self.assertNotIn("GAMMA-19", str(response))
 
     def test_intra_message_order_uses_source_offset_not_hash_or_model_order(self):
-        self.add("First topic was color. Second topic was shape. Third topic was weight.")
+        self.add("First topic was color.\n\nSecond topic was shape.\n\nThird topic was weight.")
         self.provider.plan_value = {"intents": ["order"], "order_by": "first_mention", "obligations": []}
         def choose(q, p, es):
             return {"decisions": [{"id": e.id, "quotes": ["Third topic was weight.", "First topic was color.",
                                    "Second topic was shape."]} for e in es]}
         self.provider.disclose_evidence = choose
-        response = self.pipeline.search(SearchRequest("Order of each topic", "u", 8))
-        self.assertEqual([e['content'] for e in response['data']], ['[user] First topic was color.',
-                         '[user] Second topic was shape.', '[user] Third topic was weight.'])
+        response, trace = self.pipeline.search_with_trace(SearchRequest("Order of each topic", "u", 8))
+        self.assertEqual(len(response['data']), 1)
+        content = response['data'][0]['content']
+        self.assertLess(content.index('First topic was color.'), content.index('Second topic was shape.'))
+        self.assertLess(content.index('Second topic was shape.'), content.index('Third topic was weight.'))
+        self.assertEqual(trace['evidence_paragraphs'][response['data'][0]['id']], [1, 2, 3])
+        self.assertEqual(len(trace['evidence_ranges'][response['data'][0]['id']]), 3)
+
+    def test_oversized_rule_keeps_precondition_and_unmatched_exception_spans(self):
+        premise = "Routine deployments require approval."
+        exception = "Exception: emergency rollback is allowed."
+        filler = "Archived operational notes.\n\n" * 30
+        content = premise + "\n\n" + filler + exception
+        nodes = [fixtures.fact(premise, "routine deployment", predicate="deployment", kind="procedure", key="procedure"),
+                 fixtures.fact(exception, "emergency rollback", predicate="exception", kind="rule", key="exception")]
+        relations = [{"from": "procedure", "to": "exception", "kind": "EXCEPT_IF",
+                      "message": 0, "quote": exception}]
+        self.add(content, nodes, relations=relations)
+        self.provider.plan_value = {"intents": ["procedure"], "required_relations": ["EXCEPT_IF"],
+                                    "obligations": [{"id": "o1", "query": "routine deployment approval"}]}
+        self.pipeline.config = replace(self.config, char_budget=200)
+
+        response, trace = self.pipeline.search_with_trace(SearchRequest("What are routine deployment rules?", "u", 3))
+
+        self.assertEqual(len(response['data']), 1)
+        item = response['data'][0]
+        self.assertIn(premise, item['content'])
+        self.assertIn(exception, item['content'])
+        positions = item['source_paragraphs']
+        self.assertEqual(positions[0], 1)
+        self.assertGreater(positions[1], positions[0])
+        self.assertEqual(len(item['source_ranges']), 2)
+        self.assertEqual(len(trace['evidence_spans'][item['id']]), 2)
 
     def test_invalid_plan_receives_one_validated_repair(self):
         self.add("My report cadence is monthly.")
