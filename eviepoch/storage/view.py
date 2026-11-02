@@ -23,7 +23,7 @@ class ReadSession:
 
     def __getattr__(self, name):
         if name not in {"dense", "lexical", "temporal", "snapshot", "related", "graph_candidates",
-                        "coverage", "follow", "source_neighbors"}:
+                        "coverage", "follow", "source_neighbors", "coding_candidates"}:
             raise AttributeError(name)
         def read(*args, **kwargs):
             started = time.perf_counter()
@@ -243,6 +243,10 @@ class View:
                  and set(edge.source_ids) <= sources.keys()]
         return Snapshot(context.generation, context.policy_generation, sources, nodes, edges, spans)
 
+    def coding_candidates(self, query: str, limit: int) -> dict[str, float]:
+        from ..adapters.coding.search import coding_lexical_channel
+        return coding_lexical_channel(self, query, limit)
+
     def lexical(self, query: str, limit: int) -> dict[str, float]:
         query_terms = list(dict.fromkeys(terms(query)))[:128]
         if not query_terms:
@@ -431,6 +435,8 @@ class View:
                 sources[data["id"]] = Source(**data)
             elif kind == "span":
                 spans[data["id"]] = Span(**data)
+            elif kind.startswith("coding_") or kind.startswith("multimodal_"):
+                continue
             else:
                 nodes[data["id"]] = node_from_dict(data)
         missing = {sid for node in nodes.values() for sid in node.source_ids} - sources.keys()

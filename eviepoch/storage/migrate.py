@@ -9,10 +9,15 @@ from ..config import Settings
 from ..domain import Source, date_mentions
 from ..providers import Providers
 from .entities import index_entity_mentions
+from .coding_schema import coding_schema
+from .multimodal_schema import multimodal_schema
 from .schema import graph_indexes, schema, temporal_indexes
 
 TABLES = ("ee_namespaces", "ee_requests", "ee_objects", "ee_vectors", "ee_postings", "ee_entity_mentions",
-          "ee_dependencies", "ee_provenance", "ee_versions", "ee_edges", "ee_tombstones", "ee_operations")
+          "ee_dependencies", "ee_provenance", "ee_versions", "ee_edges", "ee_tombstones", "ee_operations",
+          "ee_repositories", "ee_code_snapshots", "ee_commit_parents", "ee_file_revisions", "ee_symbol_revisions",
+          "ee_engineering_events", "ee_patch_attempts", "ee_test_runs", "ee_experiences", "ee_coding_edges",
+          "ee_applicability_assessments", "ee_coding_blobs")
 
 
 def migrate(admin_url: str, service_role: str, config: Settings):
@@ -22,6 +27,8 @@ def migrate(admin_url: str, service_role: str, config: Settings):
     with psycopg.connect(admin_url) as conn:
         conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
         conn.execute(schema(True, config.embed_dimensions))
+        conn.execute(coding_schema(True))
+        conn.execute(multimodal_schema(True))
         _upgrade_temporal_schema(conn)
         identity = json.dumps(Providers(config).embedding_identity(), sort_keys=True)
         row = conn.execute("SELECT value FROM ee_metadata WHERE key='embedding_identity'").fetchone()
@@ -29,7 +36,7 @@ def migrate(admin_url: str, service_role: str, config: Settings):
             raise RuntimeError("Embedding identity changed; create and reimport into a new database")
         _partition_vectors(conn, config.embed_dimensions)
         conn.execute("INSERT INTO ee_metadata(key,value) VALUES('embedding_identity',%s) ON CONFLICT DO NOTHING", (identity,))
-        conn.execute("INSERT INTO ee_metadata(key,value) VALUES('schema_version','4') "
+        conn.execute("INSERT INTO ee_metadata(key,value) VALUES('schema_version','6') "
                      "ON CONFLICT(key) DO UPDATE SET value=excluded.value")
         role = sql.Identifier(service_role)
         service_password = os.getenv("EPOCH_APP_DB_PASSWORD", "")

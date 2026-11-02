@@ -5,11 +5,12 @@ import re
 from dataclasses import dataclass
 
 from ..domain import Snapshot, stable_id
+from ..domain.content import ContentPart
 
 @dataclass
 class Evidence:
     id: str
-    content: str
+    content: str | list[ContentPart]
     created_at: str | None
     score: float
     source_id: str

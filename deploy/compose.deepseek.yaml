@@ -1,0 +1,9 @@
+services:
+  eviepoch:
+    environment:
+      EPOCH_MODEL_POLICY: research
+      EPOCH_LLM_MODEL: deepseek-flash
+      EPOCH_LLM_BASE_URL: https://api.deepseek.com
+      OPENAI_API_KEY: "${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY is required}"
+      EPOCH_REQUEST_TIMEOUT: "300"
+      EPOCH_EXTRACTION_DEADLINE_SECONDS: "900"

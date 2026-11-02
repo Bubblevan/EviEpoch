@@ -1,0 +1,25 @@
+[Unit]
+Description=EviEpoch private Docker-bridge to laptop reranker relay
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=nobody
+Group=nogroup
+ExecStart=/usr/bin/python3 /usr/local/lib/eviepoch/codex_tunnel_bridge.py --listen 172.19.0.1 --listen-port 18014 --target 127.0.0.1 --target-port 8090 --max-connections 32 --idle-timeout 240
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+MemoryMax=32M
+CPUQuota=10%
+TasksMax=40
+RestrictAddressFamilies=AF_INET AF_UNIX
+StandardOutput=null
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target

@@ -6,12 +6,17 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import re
+import threading
 import uuid
 from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
 
 log = logging.getLogger("eviepoch.diagnostics")
 _REQUEST_CONTEXT = contextvars.ContextVar("eviepoch_request_diagnostics", default={})
+_TRACE_WRITE_LOCK = threading.Lock()
 _LABEL = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 _STATUS = re.compile(r"^[1-5][0-9]{2}$")
 _RETRY_SECONDS = re.compile(r"^[0-9]{1,5}$")
@@ -116,7 +121,9 @@ def request_context(*, operation: str, request_id: str | None = None, fingerprin
                     query_chars: int | None = None, top_k: int | None = None,
                     options_count: int | None = None):
     """Attach allow-listed, content-free request metadata to downstream stage logs."""
-    context = {"operation": _safe_label(operation), "trace_id": uuid.uuid4().hex}
+    context = dict(_REQUEST_CONTEXT.get())
+    context.update({"operation": _safe_label(operation),
+                    "trace_id": context.get("trace_id") or uuid.uuid4().hex})
     fingerprint = _fingerprint(request_id, fingerprint_key)
     if fingerprint is not None:
         context["request_id_fingerprint"] = fingerprint
@@ -130,6 +137,103 @@ def request_context(*, operation: str, request_id: str | None = None, fingerprin
         yield
     finally:
         _REQUEST_CONTEXT.reset(token)
+
+
+def begin_request_trace():
+    """Start an authorized API trace shared by request audit and internal stages."""
+    trace_id = uuid.uuid4().hex
+    token = _REQUEST_CONTEXT.set({"trace_id": trace_id})
+    return trace_id, token
+
+
+def end_request_trace(token) -> None:
+    _REQUEST_CONTEXT.reset(token)
+
+
+def _trace_default(value):
+    from dataclasses import asdict, is_dataclass
+
+    if is_dataclass(value):
+        return asdict(value)
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json")
+    if hasattr(value, "item"):
+        return value.item()
+    if isinstance(value, (set, frozenset)):
+        return sorted(value)
+    raise TypeError(f"unsupported trace value: {type(value).__name__}")
+
+
+def _positive_env(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return default
+
+
+def log_dataflow_event(stage: str, **fields) -> None:
+    """Append private, bounded, content-bearing Add/Search stage data to disk."""
+    if os.getenv("EPOCH_PIPELINE_TRACE_ENABLED", "").strip().lower() not in {"1", "true", "yes", "on"}:
+        return
+    folder_value = os.getenv("EPOCH_PIPELINE_TRACE_DIR") or os.getenv("EPOCH_AUDIT_DIR")
+    if not folder_value:
+        return
+    folder = Path(folder_value)
+    context = _REQUEST_CONTEXT.get()
+    event = {
+        "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "event": "pipeline_dataflow",
+        "trace_id": context.get("trace_id"),
+        "operation": context.get("operation"),
+        "stage": _safe_label(stage),
+        **fields,
+    }
+    line = (json.dumps(event, ensure_ascii=False, separators=(",", ":"), default=_trace_default) + "\n").encode("utf-8")
+    max_event = _positive_env("EPOCH_PIPELINE_TRACE_MAX_EVENT_BYTES", 4_194_304)
+    if len(line) > max_event:
+        import hashlib
+
+        line = (json.dumps({
+            "timestamp": event["timestamp"], "event": event["event"],
+            "trace_id": event["trace_id"], "operation": event["operation"],
+            "stage": event["stage"], "payload_omitted": True,
+            "payload_bytes": len(line), "payload_sha256": hashlib.sha256(line).hexdigest(),
+        }, separators=(",", ":")) + "\n").encode("utf-8")
+    try:
+        with _TRACE_WRITE_LOCK:
+            folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+            if os.name != "nt":
+                os.chmod(folder, 0o700)
+            now = datetime.now(timezone.utc)
+            files = sorted(folder.glob("pipeline-traces-*.jsonl"), key=lambda item: item.name)
+            cutoff = now.timestamp() - _positive_env("EPOCH_PIPELINE_TRACE_RETENTION_DAYS", 30) * 86400
+            for item in files:
+                try:
+                    if item.stat().st_mtime < cutoff:
+                        item.unlink()
+                except FileNotFoundError:
+                    pass
+            files = sorted(folder.glob("pipeline-traces-*.jsonl"), key=lambda item: item.name)
+            total = sum(item.stat().st_size for item in files if item.exists())
+            if total + len(line) > _positive_env("EPOCH_PIPELINE_TRACE_MAX_DISK_BYTES", 4_294_967_296):
+                marker = folder / "PIPELINE_TRACE_CAP_REACHED.txt"
+                if not marker.exists():
+                    marker.write_text(f"{event['timestamp']} pipeline trace paused: disk byte limit reached.\n",
+                                      encoding="utf-8")
+                    if os.name != "nt":
+                        os.chmod(marker, 0o600)
+                return
+            marker = folder / "PIPELINE_TRACE_CAP_REACHED.txt"
+            if marker.exists():
+                marker.unlink()
+            current = folder / f"pipeline-traces-{now:%Y-%m-%d}.jsonl"
+            with current.open("ab") as stream:
+                if os.name != "nt":
+                    os.chmod(current, 0o600)
+                stream.write(line)
+                stream.flush()
+    except OSError as exc:
+        log.error("pipeline trace write failed (%s)", type(exc).__name__)
 
 
 def _context_fields() -> dict:

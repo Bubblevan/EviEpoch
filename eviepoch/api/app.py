@@ -8,9 +8,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..config import Settings
+from ..domain.content import normalize_content, validate_media_limits
 from .audit import PayloadAuditMiddleware
 from ..observability.diagnostics import log_api_failure, request_context
 from ..domain import IdempotencyConflict, IngestBusy, InvalidExtraction
@@ -22,14 +25,14 @@ from ..providers import ProviderUnavailable
 class MessageBody(BaseModel):
     model_config = ConfigDict(extra="allow")
     role: str = Field(min_length=1)
-    content: str = Field(min_length=1)
+    content: str | list[dict[str, Any]]
     timestamp: int | None = None
 
-    @field_validator("role", "content")
+    @field_validator("role")
     @classmethod
-    def nonblank(cls, value):
+    def nonblank_role(cls, value):
         if not value.strip():
-            raise ValueError("value must not be blank")
+            raise ValueError("role must not be blank")
         return value
 
 
@@ -43,7 +46,7 @@ class AddBody(BaseModel):
 
 class SearchBody(BaseModel):
     model_config = ConfigDict(extra="allow")
-    query: str = Field(min_length=1)
+    query: str | list[dict[str, Any]]
     user_id: str = Field(min_length=1)
     top_k: int = Field(ge=0)
     options: list[str] | None = None
@@ -88,6 +91,42 @@ def create_app(config: Settings | None = None, memory=None) -> FastAPI:
         retention_days=_env_positive_int("EPOCH_AUDIT_RETENTION_DAYS", 30),
     )
     app.state.pipeline = memory
+
+    def _coerce_message(message: MessageBody) -> Message:
+        if isinstance(message.content, list):
+            if config.task_adapter != "multimodal":
+                raise ValueError("ordered content arrays require EPOCH_TASK_ADAPTER=multimodal")
+            envelope = normalize_content(message.content)
+            validate_media_limits(
+                envelope,
+                max_single=config.multimodal_max_image_bytes,
+                max_total=config.multimodal_max_add_bytes,
+            )
+            text = envelope.text_for_extraction()
+            return Message(
+                message.role,
+                text if text.strip() else "[image-only message]",
+                message.timestamp,
+                envelope=envelope,
+            )
+        if not str(message.content).strip():
+            raise ValueError("content must not be blank")
+        return Message(message.role, message.content, message.timestamp)
+
+    def _coerce_query(value: str | list[dict[str, Any]]):
+        if isinstance(value, list):
+            if config.task_adapter != "multimodal":
+                raise ValueError("ordered query arrays require EPOCH_TASK_ADAPTER=multimodal")
+            envelope = normalize_content(value)
+            validate_media_limits(
+                envelope,
+                max_single=config.multimodal_max_image_bytes,
+                max_total=config.multimodal_max_add_bytes,
+            )
+            return value
+        if not value.strip():
+            raise ValueError("query must not be blank")
+        return value
 
     def authorize(authorization, x_api_key):
         if config.auth_scheme == "none":
@@ -145,13 +184,22 @@ def create_app(config: Settings | None = None, memory=None) -> FastAPI:
             x_api_key: str | None = Header(default=None)):
         authorize(authorization, x_api_key)
         started = time.perf_counter()
-        input_chars = sum(len(message.content) for message in body.messages)
+        input_chars = sum(
+            len(message.content) if isinstance(message.content, str) else len(str(message.content))
+            for message in body.messages
+        )
         with request_context(operation="add", request_id=body.request_id,
                              fingerprint_key=config.auth_token, message_count=len(body.messages),
                              input_chars=input_chars):
             try:
-                return memory.add(AddRequest(body.request_id, body.user_id, body.session_id,
-                                             [Message(m.role, m.content, m.timestamp) for m in body.messages]))
+                return memory.add(
+                    AddRequest(
+                        body.request_id,
+                        body.user_id,
+                        body.session_id,
+                        [_coerce_message(m) for m in body.messages],
+                    )
+                )
             except (IngestBusy, ProviderUnavailable, InvalidExtraction) as exc:
                 log_api_failure(
                     operation="add",
@@ -170,10 +218,12 @@ def create_app(config: Settings | None = None, memory=None) -> FastAPI:
                x_api_key: str | None = Header(default=None)):
         authorize(authorization, x_api_key)
         started = time.perf_counter()
-        with request_context(operation="search", query_chars=len(body.query), top_k=body.top_k,
+        query = _coerce_query(body.query)
+        query_chars = len(query) if isinstance(query, str) else len(str(query))
+        with request_context(operation="search", query_chars=query_chars, top_k=body.top_k,
                              options_count=len(body.options or [])):
             try:
-                return memory.search(SearchRequest(body.query, body.user_id, body.top_k, body.options))
+                return memory.search(SearchRequest(query, body.user_id, body.top_k, body.options))
             except (IngestBusy, ProviderUnavailable, InvalidExtraction) as exc:
                 log_api_failure(
                     operation="search",
@@ -181,7 +231,7 @@ def create_app(config: Settings | None = None, memory=None) -> FastAPI:
                     status_code=429 if isinstance(exc, IngestBusy) else 503,
                     duration_ms=(time.perf_counter() - started) * 1000,
                     fingerprint_key=config.auth_token,
-                    query_chars=len(body.query),
+                    query_chars=query_chars,
                     top_k=body.top_k,
                     options_count=len(body.options or []),
                 )
@@ -204,7 +254,8 @@ def create_app(config: Settings | None = None, memory=None) -> FastAPI:
         def trace(body: SearchBody, authorization: str | None = Header(default=None),
                   x_api_key: str | None = Header(default=None)):
             authorize(authorization, x_api_key)
-            data, details = memory.search_with_trace(SearchRequest(body.query, body.user_id, body.top_k, body.options))
+            query = _coerce_query(body.query)
+            data, details = memory.search_with_trace(SearchRequest(query, body.user_id, body.top_k, body.options))
             return {"response": data, "trace": details}
 
     return app

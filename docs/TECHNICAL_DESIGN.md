@@ -1,13 +1,17 @@
 # EviEpoch 参赛系统技术设计
 
-**版本：** 1.0 目标设计  
-**日期：** 2026-10-27  
-**产品合同：** [PRD](PRD.md)  
-**依据：** [赛事与实现上下文](COMPETITION_CONTEXT.md) · [综述研究议程](../literature/survey-agenda.md) · [系统启发](../literature/systems/eviepoch-implications.md)
+**版本：** 1.1 目标设计，新增 Coding / Multimodal 扩展
+
+**日期：** 2026-11-02，Asia/Shanghai
+
+**产品合同：** [PRD](PRD.md)
+**依据：** [AML 官方协议与评测说明](https://agentmemories.ai) · [综述研究议程](../literature/survey-agenda.md) · [系统启发](../literature/systems/eviepoch-implications.md) · [Coding / Multimodal 源码审阅](CODING_MULTIMODAL_SOURCE_REVIEW.md)
 
 **实现进展：** 本文保留完整目标设计；当前分层代码、实际验收与未完成项见 [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md)。开发验证按用户要求暂用 DeepSeek，正式模型合同不变。
 
 本文定义拟实现的完整参赛架构。SQLite 是显式本地验证适配器；标准生产 Compose 使用 PostgreSQL/pgvector。本文的容量与 SLA 目标仍需在目标硬件和真实数据库上验收，不代表已经达到。
+
+§1–§17 是共享记忆核心的目标合同；§18–§23 将其扩展为 Textual、Coding、Multimodal 三种任务适配器。Coding 的目标是按仓库版本复用工程经验并抵抗干扰历史；Multimodal 的目标是联合使用原始图像、结构化视觉观察与文本证据。两种扩展共享 namespace、generation、来源依赖和治理机制，分别拥有领域类型、索引身份、查询义务和评测配置。新增章节描述待实现能力，当前代码状态与源码依据列在 §18.1 及配套审阅文档。
 
 ## 1. 技术主张
 
@@ -75,8 +79,8 @@ flowchart TB
 |---|---|---|
 | Namespace | id, external_user_id, committed_generation, policy_generation | 隔离边界与可见版本 |
 | IngestRequest | namespace, request_id, payload_hash, status, lease, committed_generation | 幂等和处理进度；PENDING 不对 Search 可见 |
-| SourceMessage | source_id, request/session, ordinal, role, original_content, source_timestamp, stored_at, hash | 权威原文，普通更新不改写 |
-| SourceSpan | span_id, source_id, UTF-8 byte_start/end, text_hash | 精确来源；支持独立片段检索 |
+| SourceMessage | source_id, request/session, ordinal, role, original_content, source_timestamp, stored_at, hash | 权威字符串或有序图文原件，普通更新不改写；图文目标模型见 §20–§21 |
+| SourceSpan | span_id, source_id, part_ordinal, UTF-8 byte_start/end, text_hash | 精确文字来源；偏移属于对应 text part；现有字符串视为 part 0 |
 | Entity/Mention | canonical_id, alias, type, mention_span, identity_confidence | 名称与同一性分开，保留同名分歧 |
 | Assertion | subject, predicate, object/value, modality, cardinality, provenance, confidence | 一项可支持/反驳的陈述，不自动等于客观真值 |
 | Event | event_type, participants, time_bounds, location, sources | 已发生/计划/假设事件分型 |
@@ -282,13 +286,13 @@ coverage 使用 AND/OR 需求图：换工作与搬家的顺序至少需要两个
 
 ## 9. 证据装配与外部接口
 
-公开 Add 请求、响应与 Search 字段遵循 [当前官方合同](COMPETITION_CONTEXT.md)。服务本地路由可继续 /add、/search，网关把提交路径映射到它们。
+公开 Add 请求、响应与 Search 字段遵循 [AML 当前官方合同](https://agentmemories.ai)。服务本地路由可继续 /add、/search，网关把提交路径映射到它们。Textual/Coding 的 content/query 使用字符串；Multimodal 的有序图文请求与响应见 §20。
 
 ### 9.1 证据单元
 
-以写入时确定的源消息/片段为稳定单位，ID 由 namespace + request + ordinal + span/version 稳定导出。动态组合的临时段落不伪装成稳定记忆。
+以写入时确定的源消息/片段为稳定单位，ID 由 namespace + request + ordinal + part/span/version 稳定导出。多来源证据包使用有序 atom IDs 与 packer 版本生成可复现的 bundle ID，并保存完整映射；临时生成的无来源段落不能成为记忆对象。
 
-content 只含原始语言的源文本与确定性的真实来源标记（时间/role）。不输出“所以答案是 Y”、未经来源验证的摘要、生成式状态说明或诱导 Answer 的指令。因果/纠正/规则通过源句本身及序列顺序交付，内部 metadata 不被视作平台会读取的字段。
+Textual/Coding 的 content 只含原始语言的源文本与确定性的真实来源标记（时间/role、可核验版本与位置）。Multimodal 另外交付原始图片或带父图/transform 的允许区域，来源依赖与披露条件保持一致。生成 caption、OCR 和 applicability 推断参与内部索引、导航与核验，不能伪装成原始源句；图片证据的合同见 §20.2、§20.6–§20.8。不输出“所以答案是 Y”、未经来源验证的摘要、生成式状态说明或诱导 Answer 的指令。内部 metadata 不被视作平台会读取的字段。
 
 返回以证据对查询的边际贡献和依赖组组织，组内可按时间排列；不在最后执行无条件 raw-first 重排破坏已计算顺序。所有返回项都是来源证据，派生事实仅参与索引。
 
@@ -415,6 +419,7 @@ Answer 模型、prompt、judge、token/调用预算、数据切片和种子固�
 
     eviepoch/
       api/                 # 官方合同、鉴权与请求生命周期
+      adapters/            # Textual / Coding / Multimodal 领域合同与输入输出
       domain/              # 来源、实体、时间、断言、程序和治理类型
       ingest/              # 抽取、源片段核验、幂等编排
       manage/              # 巩固、反思、状态投影与反证修订
@@ -447,7 +452,7 @@ Answer 模型、prompt、judge、token/调用预算、数据切片和种子固�
 - 上游仓库/作者/commit、许可和修改说明；
 - Full Run/Suite/Pipeline/数据版本标识及受控保留/删除记录。
 
-截止与 Full 次数按 [赛事上下文](COMPETITION_CONTEXT.md) 执行。运行 Full 前冻结实际部署版本和方法配置，评测进程不接收人工修改记忆或调换算法。
+截止与 Full 次数按 [AML 官方赛事说明](https://agentmemories.ai) 及实际获批评测版本执行。运行 Full 前冻结实际部署版本和方法配置，评测进程不接收人工修改记忆或调换算法。
 
 
 ## 17. PRD 需求追踪
@@ -466,3 +471,465 @@ Answer 模型、prompt、judge、token/调用预算、数据切片和种子固�
 | F15 Workbench | §14 | 公开样本的完整操作与证据 diff |
 | F16 容量 | §11–§12、§14 | 真实 provider/公网混合负载报告 |
 | F17 可复现 | §13、§16 | manifest、pipeline/data hash、许可与版本绑定 |
+
+
+## 18. 三赛道共享核心与扩展边界
+
+### 18.1 当前代码起点
+
+本次设计基于 2026-11-02 的本地工作区，HEAD 为 `2bf80f51fb3e5ebe1022dbc7291d18f84b56e053`，含正在修改的运行与审计代码；关键文件哈希保存在[源码审阅](CODING_MULTIMODAL_SOURCE_REVIEW.md)。现有实验不能自动代表以下扩展的结果。
+
+| 当前代码 | 可复用的实际能力 | 扩展需要完成的变化 |
+|---|---|---|
+| `api/app.py`、`domain/requests.py` | 标准 Add/Search、user 隔离、字符串消息和查询 | 有序 ContentPart 类型、图文请求校验、task adapter 路由 |
+| `domain/models.py` | Source、UTF-8 Span、Node、Edge、多时间字段、schema v4 | 分 part 来源定位、RepositorySnapshot、工程事件、MediaAsset、Region、带类型的证据原子 |
+| `pipeline.py`、`storage/repository.py` | 抽取核验、独立 passage 索引、巩固预计算、generation 冲突重试和原子发布 | 领域 Add 编排、媒体持久化屏障、表示版本与完整性清单 |
+| `storage/view.py`、`retrieval/engine.py` | Dense/BM25/时间/实体图候选、RRF、重排、证明绑定和缺口取证 | 代码路径/符号/版本候选、图文 Query、视觉候选、领域证据义务 |
+| `retrieval/selection.py`、`evidence.py` | 来源证明组、预算内集合选择、精确文本 span 打包 | 混合证据原子、代码兼容状态、图片完整性、多维预算和前提依赖 |
+| `governance/lifecycle.py` | 在线来源及派生对象的抑制/擦除 | 媒体、裁剪、OCR、代码快照、表示及其缓存的依赖闭包 |
+| `providers/client.py`、`api/audit.py` | 字符串模型输入、provider 调用与可选正文审计 | 图文 provider adapter、媒体大小统计、无 Base64 正文的诊断路径 |
+
+当前 Salience 仍主要是保护标记；Consolidation 是可回钻的抽取式导航；Reflection 是显式经验的支持/反例更新；Beam 是证据集合选择。这些是扩展的起点。§19–§21 给出领域 salience、经验修订和状态/证据联合求解的目标实现，不能把现有开关视为已经实现这些目标。
+
+### 18.2 共享抽象与领域职责
+
+`TaskAdapter` 是领域扩展接口，配置为 `textual | coding | multimodal`；它与现有 `full/hybrid/b0` 检索配置及 `competition/research` 模型政策分别记录。官方请求没有必填 track 字段，因此适配器由部署版本绑定；标准请求不增加 repository、commit 或本机文件路径等必填参数。
+
+    TaskAdapter.normalize_add(payload) -> OrderedSourceBundle
+    TaskAdapter.prepare_write(bundle, committed_view) -> PreparedPublication
+    TaskAdapter.plan(query_bundle, options, committed_view) -> QueryPlan
+    TaskAdapter.candidate_channels(plan, committed_view) -> RankedChannels
+    TaskAdapter.evidence_atoms(candidates, committed_view) -> EvidenceAtoms
+    SharedSolver.select(plan, hypotheses, atoms, budgets) -> EvidenceBundles
+    TaskAdapter.pack(bundles, policy_snapshot) -> StandardSearchResponse
+
+这些是目标接口，不是当前已经存在的方法。归一化输出保留原消息、part 顺序、role、时间和来源身份；派生抽取不能替换这些内容。适配器产生领域对象与候选，核心管理发布、隔离、来源依赖、状态选择、预算与治理。
+
+```mermaid
+flowchart TB
+    IN["官方 Add / 原生 Agent 事件"] --> N["标准化来源与 TaskAdapter"]
+    N --> T["Textual: 事实 / 事件"]
+    N --> C["Coding: 快照 / 符号 / 工具轨迹 / 验证结果"]
+    N --> M["Multimodal: 原图 / 有序 parts / OCR / 结构化观察"]
+    T --> P["准备表示与来源依赖"]
+    C --> P
+    M --> P
+    P --> G["发布完整 generation"]
+    G --> DB[("PG: 来源、版本、图、词法及分集合向量")]
+    P --> BLOB[("媒体与工程制品对象存储")]
+    Q["标准 Search: 文本或图文 Query"] --> PLAN["领域义务 + 时间 / 版本 / 视觉条件"]
+    DB --> RECALL["多路候选 → RRF → 领域重排"]
+    PLAN --> RECALL
+    RECALL --> SOLVE["状态假设 + 带类型证据组联合选择"]
+    BLOB --> SOLVE
+    SOLVE --> OUT["来源还原、治理及预算 → AML Answer / Coding Agent"]
+```
+
+来源层提供字节、文本和顺序保真；索引、摘要、经验、caption 与视觉特征都是可重建表示。表示可能省略信息，因此必须能回到原始代码、轨迹或图像。跨领域关系也必须有来源，例如截图对应某个 UI 测试步骤，不能仅凭时间邻近写成已验证关联。
+
+## 19. Coding Memory：按版本复用工程经验
+
+### 19.1 目标、参考实现与输入边界
+
+目标覆盖缺陷修复的定位、根因、补丁约束与验证，以及功能增强的需求、接口、实现依赖和测试适配；在四档噪声下保留正确历史、失败教训和适用条件。主参考为 claude-mem `v12.1.1`，补充 causal-memory 的决策/结果表示与 MemoraX 的原生客户端来源、session/turn/repository 绑定。
+
+claude-mem 的 `search → timeline → get_observations` 在原生工具端可由 Agent 多次调用；AML 只有一次 Search 交付时，三个阶段由 EviEpoch 内部完成，最终返回展开后的实际证据。仅返回索引 ID、摘要或“继续调用某工具”会使平台缺少必要内容。
+
+两种输入共享领域模型：
+
+- **AML Add**：从平台提供的字符串消息中识别任务、工具调用、路径、diff、测试输出和显式决策说明，每项关联原始 span；缺失的仓库 SHA、命令退出码或文件内容保留未知。
+- **原生开发适配器**：记录客户端原生的 request/turn/tool 事件和可读取的仓库快照，补充工作区 overlay、工具入参/返回、命令执行目录及制品 hash。相同 native ID 在不同客户端下仍分别命名。
+- **仓库资料导入**：对用户授权的仓库构建文件与符号索引；它是独立来源流，不能拿运行 EviEpoch 服务的本机仓库状态替代平台任务的仓库状态。
+
+### 19.2 工程数据模型
+
+| 对象 | 必须保存的字段与语义 |
+|---|---|
+| Repository | namespace、repo_id、可核验 remote/显式项目标识、身份来源；文件夹 basename 不能作为唯一身份 |
+| RepositorySnapshot | repo_id、commit_sha、tree_sha、parent_shas、dirty_overlay_hash、submodule/dependency fingerprint、来源；缺失字段为 unknown |
+| FileRevision | snapshot_id、相对路径、Git blob/hash、语言、完整内容或来源引用、编码；行号属于该 blob |
+| SymbolRevision | snapshot_id、file_revision、语法类型、限定名、signature、byte/line range、body_hash；重命名映射保存核验状态 |
+| EngineeringEvent | client/session/turn/tool_call_id、有序输入/输出 span、cwd、before/after snapshot、event_time、stored_generation |
+| PatchAttempt | base_snapshot、原始 diff、patch_hash、作用文件/符号、attempt_id、applied_snapshot、是否应用及结果来源 |
+| TestRun | command/selector、environment fingerprint、运行时 snapshot/tree/overlay、exit_code、输出 span、测试项结果与执行状态 |
+| EngineeringObservation | bugfix/feature/discovery/decision/refactor/change、facts、files_read/modified、相关事件与原始 span；只作导航和经验候选 |
+| DecisionOutcome | problem、前提、决策、替代方案、结果极性、失败症状、证据、适用版本/依赖范围、支持与反例 |
+| ApplicabilityAssessment | query snapshot、historical attempt、compatible/incompatible/unknown、逐项依据、可迁移部分、缺口；Search 内暂存 |
+
+`snapshot_id = H(namespace, repo_id, commit/tree identity, dirty overlay, identity_version)`。无可核验 SHA 时使用来源限定的 provisional snapshot，不能伪装成一个真实 Git commit。相同 commit 加不同未提交 diff 是两个快照；相同路径在不同 repo 下也是不同对象。
+
+Git 版本按提交 DAG 判断祖先、分叉、合并和回滚，不转换成一个全局时间区间。代码有效范围可以是可验证的 ancestry 条件、blob/symbol 指纹及依赖约束的合取。较晚写入的旧补丁不覆盖当前代码；某分支上的通过结果不自动适用于另一分支。
+
+### 19.3 写入链路与经验治理
+
+1. 固化原始任务、工具入参/返回、文件读取、diff、退出码与测试输出。官方来源若已经是字符串，保持其字节与 span；不重新排版 diff 后再当原始来源。
+2. 按事件关联 task、attempt 和 before/after 快照。只有显式 tool_call/turn 关联或可验证制品关系才能建立确定边；时间邻近只产生待核验候选。
+3. 对已提供文件构建 tree-sitter 等语法解析、符号、导入和调用候选索引；动态调用关系与静态近似分别标记。没有完整文件时仅索引已经观察到的符号或片段。
+4. 使用 claude-mem 的工程观察结构提取变化、发现和显式决策说明，并逐项关联源码/工具输出 span；保留失败尝试和被否定的方案。
+5. 构建 `REPRODUCED_BY / MODIFIES / CALLS / DEPENDS_ON / TESTED_ON / VERIFIED_BY / REVERTS / RESULT_OF / EXCEPT_IF` 等带证据边。测试通过必须绑定测试运行的确切 tree/overlay。
+6. 生成按 repo、任务、版本范围、规则前提组织的导航摘要与经验对象，再计算所有声明为必需的向量、路径/符号 postings 和依赖关系。
+7. 复用 prepare/publish 协议，校验 generation 后一次发布。经验、索引与 TestRun 不出现“事实先可见、验证依据稍后补上”的窗口。
+
+工程 salience 为 `novelty + decision_impact + failure_signal + verified_outcome + reusable_constraint - redundancy` 的可解释组合，参数按公开训练数据冻结。分数只决定观察层组织和活跃派生索引；原始工具证据独立保留。高优先级包括新根因、失败断言、接口契约、版本条件、回滚、环境差异；重复进度播报和记忆工具对自身内容的回读不形成新的经验支持。
+
+巩固必须保留 `problem → attempted change → observed result → verification → applicability`。不同快照、不同环境或成功/失败极性不明的尝试不能压成“方案 X 有效”。同一失败出现多次也要区分独立运行和重复日志。
+
+经验状态为 `proposed / observed / tested / contradicted / superseded`；状态变化由新来源驱动。写着“fixed”的助手消息只能证明有人声称修复；存在匹配快照的成功 TestRun 才能增加验证支持。因果推断保存 `stated / experimentally_supported / hypothesized`，执行顺序不直接产生 `caused` 边。Search 的访问次数和模型确信程度不增加经验真值。
+
+### 19.4 存储与代码表示
+
+权威来源与图仍在 PostgreSQL。新增快照/父边、文件版本、符号版本、事件、patch、test_runs、经验及 applicability 索引；内容较大的文件、diff 和完整测试制品可放对象存储，PG 保存 hash 与依赖。文件路径、限定符号、错误码、测试名、异常栈和依赖版本建立精确/词法访问路径。
+
+文本向量分别编码任务症状、工程观察、决策/结果、函数或补丁片段，各表示拥有独立 ID。跨语言代码向量作为 research 配置；competition 配置使用赛事允许的 embedding。路径与标识符保留原样，并增加拆分后的辅助词法项，不靠英文词形归一化改写真实符号。
+
+符号相似、文件重命名检测和调用图用于发现候选；它们不自动证明两个版本行为等价。相似 patch、相同函数名和相同错误词可以是高干扰负例。
+
+### 19.5 Search：抗噪召回、版本判断与证据恢复
+
+查询解析先确定 bugfix/feature、症状/需求、目标接口、已知 repo/snapshot、语言/依赖、验收条件，再生成义务：复现、根因、实施约束、曾失败方案、有效修复、相关回归测试。只有来源中或当前 query 明确提供的版本条件进入确定过滤。
+
+候选通道并行执行：
+
+| 通道 | 召回内容 |
+|---|---|
+| Exact / Sparse | 文件路径、符号、异常码、stack frame、测试名、接口与依赖版本 |
+| Dense | 症状相近但表述不同的历史任务、观察、patch 与经验 |
+| Version | 已知快照的祖先/分叉/回滚、仍存在或已迁移的文件和符号 |
+| Graph | 根因到决策、patch、测试、结果、反例及依赖条件的路径 |
+| Episode / Timeline | 命中观察附近的同 task/attempt 工程事件，恢复调查到验证的完整过程 |
+
+已知不相符的 repo 不能被路径同名绕过；跨项目经验只有在查询允许且仍属于当前 namespace 时，作为带来源的类比候选。缺少版本信息的历史可以贡献调查思路，不能包装成“可直接应用的当前补丁”。
+
+RRF 后对每条义务评分，同时输入当前可知版本条件、历史前提和失败/回滚证据。重排输出相关性、覆盖项和兼容依据，不能改写原始代码或创造 TestRun。旧版 claude-mem 的 90 天硬过滤仅保留在原样复现配置，EviEpoch 默认按版本及适用条件决定价值，长期有效的旧修复仍可被取回。
+
+状态假设与证据组至少表达：
+
+    H = {target_snapshot, applicable_attempts, dependency_conditions, unresolved_conflicts}
+    S = {reproduction_spans, cause_spans, patch_spans, preconditions, test_run_spans}
+    admissible(H, S) = repository_scope_ok
+                       AND every_verified_claim_has_matching_snapshot_test
+                       AND every_selected_patch_has_base_context
+                       AND no_unresolved_version_conflict_is_silently_collapsed
+
+控制器按 `search_index → expand_attempt_timeline → hydrate_exact_evidence → compare_applicability → find_counterexample → select` 执行，使用候选/调用/预算上限。证明缺少测试或版本条件时，取回真实缺口来源；不存在时交付已经支持的部分并保留缺口状态。
+
+### 19.6 Coding 输出与验证责任
+
+官方 `data[].content` 继续为非空字符串。证据包含真实来源中的代码、diff、前提、失败信息和验证输出；可添加可核对的 repo/snapshot、文件/行范围、时间及来源标识。原始代码片段保持缩进、换行与语义相关字符；生成摘要与 applicability 推断放在内部 trace 或原生工具导航中，官方最终 content 按 §9.1 交付真实来源。
+
+一个修复包优先包含复现、根因、适用条件、补丁证据与测试证据，必要片段尽量在一个完整候选内交付，避免平台按候选前缀裁剪时只留下补丁而丢失例外。原生 Agent 工具可另提供分层浏览入口，官方 Search 直接返回可使用证据。
+
+EviEpoch 在 Search 内判断证据适用性；实际 checkout、patch 应用、运行回归及最终任务结果由 Coding Agent/harness 执行。新执行结果只有通过后续显式 Add 或原生授权事件进入记忆。历史测试成功不写成当前任务已经解决。
+
+
+## 20. Multimodal Memory：原始图像与结构化观察共同取证
+
+### 20.1 官方接口合同
+
+2026-11-02 核对的 [AML API Guide](https://agentmemories.ai) 明确：Textual/Coding 使用字符串；Multimodal 的 `messages[].content`、`query` 和 `data[].content` 支持有序 ContentPart 数组。图片使用 inline Base64 Data URI，远程 URL 不被接受。支持 JPEG、PNG、WebP；单张解码后最多 10 MiB，一个 Add 请求合计最多 30 MiB，单个 Search 响应合计最多 30 MiB。官网未在该说明中单列 Search Query 的聚合图片大小；部署配置为 Query 明示采用 30 MiB 聚合限制，并作为本方上限记录，不能将其称为官网额外规定。
+
+    TextPart  = {type: "text", text: nonempty_string}
+    ImagePart = {type: "image_url", image_url: {url: base64_data_uri}}
+    Content   = nonempty_string | nonempty_ordered_list[TextPart | ImagePart]
+
+输入允许 image-only、text-only 和混合数组。每个 text part 原样保留，不能用换行拼接后的字符串代替有序原件；文本/图片相邻不自动证明它们表达同一事实。role、message ordinal、part ordinal 和原始 timestamp 共同进入来源定位。
+
+建议请求形态：
+
+```json
+{
+  "request_id": "write-001",
+  "user_id": "user-01",
+  "session_id": "session-01",
+  "messages": [{
+    "role": "user",
+    "timestamp": 1782864000000,
+    "content": [
+      {"type": "text", "text": "这是这次整理后的工作台。"},
+      {"type": "image_url", "image_url": {"url": "data:image/png;base64,<完整图像编码>"}},
+      {"type": "text", "text": "请记住蓝色工具箱的位置。"}
+    ]
+  }]
+}
+```
+
+上例 Base64 是文档占位，实际合同测试使用可完整解码的小图片。Add 的成功响应沿用现行回显字段。Search 的 query 可采用相同图文数组；不把 Query 中临时提供的图片自动写成用户长期记忆。
+
+### 20.2 媒体、观察与视觉来源模型
+
+| 对象 | 内容与不变量 |
+|---|---|
+| SourceContentPart | source_id、part_ordinal、type、原始 text 或 asset 引用、part_hash；重建时保持顺序 |
+| MediaAsset | namespace、asset_id、原始字节 hash、真实 MIME、decoded_bytes、尺寸、对象存储 locator、持久化状态 |
+| MediaOccurrence | asset_id 在哪个消息/part 出现、角色、陈述/记录时间；相同图片多次出现不合并来源情境 |
+| PartTextSpan | source_id、part_ordinal、UTF-8 byte_start/end、text_hash；偏移只在对应 text part 内有效 |
+| VisualObservation | asset/occurrence、schema_version、字段值、来源种类、model/prompt、置信度、视觉支持核验状态 |
+| OCRSpan | asset、文本、语言、bbox/polygon（可未知）、OCR 模型与置信度；属于视觉识别结果 |
+| VisualRegion | parent_asset、像素及归一化坐标、orientation/transform、裁剪 hash、生成方法、所属 occurrence |
+| VisualEntityMention | entity 候选、视觉属性、region/asset、跨会话同一性支持与分歧；外观相似只建立候选关系 |
+| MediaRelation | image/text/region/entity/event 间的有源关系，含支持区域与推导类型 |
+| Representation | owner、view_kind、model/revision、dimensions、preprocess/schema version、namespace/generation |
+| EvidenceAtom | text_span / raw_image / region / OCR / observation 等类型、出处、支持义务与披露状态 |
+
+SGM 字段包括场景描述、OCR、对象/实体、颜色/空间属性、时间地点、标签和关系；每个字段保存 `origin = supplied_text | supplied_caption | exif | OCR | VLM_observation | inferred_relation`。用户 caption、EXIF 和模型观察发生冲突时分别保留，不能先拼成一条“权威图像事实”。
+
+文本 span 的字节定位能验证引用确实存在；原图 hash 能验证图片身份；二者都不能单独证明 caption 或 OCR 的语义正确。视觉支持核验应记录是否实际检查了原图/区域、支持/矛盾/不确定，以及所用模型。没有可定位 bbox 时回链整图，不伪造精确区域。
+
+`captured_at`、来源声称的事件时间、消息时间和 `stored_at` 分开。图片中显示的日期、EXIF 日期与拍摄场景的真实时间可以不同。被截图的旧聊天日期也不能被新截图的写入时间替换。
+
+### 20.3 多模态 Add：把主要处理放在写入
+
+1. 校验有序 parts、Data URI、MIME 与实际解码格式，按解码字节累计媒体限制；在分配完整内存前做长度预检，解码过程中执行实际上限。Base64 字符串不能进入普通文本 chunker、BM25 或 text embedding。
+2. 将原始字节写入 namespace 作用域的持久对象存储，验证 hash/大小，创建 staged asset；文本和 occurrence 原件同时准备。
+3. 提取已有 caption/时间/位置等来源字段，再用允许的视觉模型生成结构化观察、OCR、实体、属性和关系候选。分辨率、旋转处理和抽取模型写入表示身份。
+4. 对需要精细区分的文字、图表、物体和空间关系生成区域候选与局部表示；原图独立保留。图片重复或缩略图相似不直接去掉不同来源 occurrence。
+5. 将 caption、OCR、实体属性和用户文字分别建索引；在启用的模型政策下建立原图与区域视觉向量。字段缺失、识别不确定和来源冲突单独编码。
+6. 复用时态、版本和反证管理，形成图文事件簇与导航摘要。摘要保留原始 media/part 依赖，较新的观察可以挑战较旧属性，不能覆盖原图。
+7. 在 PG 中校验基准 generation，写入来源、asset/region/observation、全部必需表示、依赖、治理和幂等账本；提交后该 generation 的对象都已有可读取媒体。
+8. Add 返回成功。PG 发布失败的 staged 对象留给按 request/lease 管理的回收器；重试重用已经验证的字节与表示，不产生第二次逻辑写入。
+
+对象存储与 PG 没有一个共同的 ACID 事务。本设计用“字节先持久化、PG 引用后发布”的协议解决可见性；不在 PG 提交前暴露 staged asset。删除流程先在治理事务中禁止读取，再执行带凭据的物理清理。已经禁止披露的媒体不能因垃圾回收未结束而继续返回。
+
+每个部署版本声明 required representations。完整多模态版本不能因视觉处理失败就无标记地按 caption-only 写入成功；caption-only 是独立、预先配置并记录的实验方法。耗时视觉计算可由有界 worker 并行，官方 Add 等待其必需产物最终发布。
+
+### 20.4 多路存储与表示身份
+
+- **PG 来源/图/时间**：消息、parts、occurrence、结构化观察、region、实体和版本/治理依赖。
+- **对象存储**：原图、带 transform 的派生 crop、公开研究制品；locator 是内部读取位置，不是官方响应中的 image_url。
+- **Sparse**：原始文本、OCR、实体名、精确数字、日期、标签和空间属性的独立 postings。
+- **Text Dense**：caption、OCR、SGM 字段、原始对话片段及事件导航分别编码。
+- **Visual Dense**：原图、局部区域与图文联合视图按明确模型空间分别索引；图片字节从不写入向量列。
+- **Graph**：source part → media occurrence → region/observation → entity/event；跨会话关联保存同一性证据和有效时间。
+
+ATM 的 Qwen3-VL dual retriever 将独立图像/文本向量归一化后拼接，是应保留的复现实验配置。EviEpoch 默认把各视图保留为独立召回臂并做 RRF，便于量化 OCR、视觉与时间各自的召回贡献，避免不同维度或模型的原始分数直接相加。
+
+### 20.5 图文 Query 与跨模态 Search
+
+Query 原件进入瞬时 `QueryBundle`，保留 parts 顺序及图像 hash。规划器读取问题原文和 query 图像，分离目标实体、所问视觉属性、时间范围、比较关系和必须检查的原图义务；Query 图像和临时描述都不进入 Add 表。
+
+| 召回臂 | 输入与用途 |
+|---|---|
+| 文本 Dense / BM25 | 原问题及义务子查询，匹配原始对话、caption、观察和 OCR |
+| OCR / Metadata | 文本中的编号、招牌、数字、地点、日期和属性约束 |
+| Visual | 文本或 Query 图片在同一视觉模型空间的原图/区域检索 |
+| Entity / Relation | 实体候选、跨会话关联、图文指代与多跳路径 |
+| Temporal / Evolution | 事件时间、拍摄/提及时间、属性更新、前后状态及版本对照 |
+| Episode / Context | 恢复被命中图片附近的对话，包含指代、否定和后续纠正 |
+
+图像 Query 的编码必须接收图像本身；把它变成空字符串或只编码随附 caption 都无法覆盖图像检索任务。ATM 当前 `encode_query(str)` 接口需要扩展；Mem-Gallery 的混合 query 编码可作为输入适配对照。
+
+候选按 source/occurrence 聚合去重，保留互补视图和来源身份。RRF 后，多模态 reranker 接收原 Query parts、候选图片/必要区域、相关原文及时间元数据，逐 obligation 给出排序分数和支持区域。重排只组织已经存在的候选，不输出或持久化新的用户事实。
+
+缺口控制器可以读取原图、扩展区域、取回相邻对话、沿实体路径找另一个会话或比较旧/新状态。任务要求颜色、位置、布局、图中文字或细小变化时，相关原图/区域必须进入视觉义务，不能因 caption 的文本相关性较高就标为完成。
+
+### 20.6 带类型的证明与联合选择
+
+现有 OR-of-AND 组以 Source ID 为单位；扩展后，以 EvidenceAtom 和明确支持条件为单位。一个来源消息存在，不意味着它的任意 caption 或裁剪已证明全部视觉细节。
+
+选中 OCR、SGM 或 region 原子时同时计算可交付来源闭包：内部表示用于找到证据，最终包必须含其允许披露的原图/区域及相关真实文字。预算按闭包后的实际内容计算，不能只计算短 OCR 后再无预算地附加图片。
+
+    Obligation {
+      query, required_modalities, entity_scope, temporal_scope,
+      alternatives: AND[atom_id or typed_support_requirement]
+    }
+
+    visual_change_obligation =
+      image_at_t1 AND time_support_t1
+      AND image_at_t2 AND time_support_t2
+      AND supported_entity_correspondence
+      AND visible_attribute_comparison
+
+Beam 状态同时维护 `H`（实体同一性、版本/时间、冲突假设）、`S`（证据原子集合）和 `U`（未满足义务）。扩展动作包含 hydrate、add_region、add_counterevidence、select_alternative 和 split_uncertain_identity。目标函数延用 §8.3 的覆盖、来源/时态一致性、多样性与成本；新增版本兼容和视觉支持项。对未核验原图、未解决身份冲突或缺少前提的集合不给完整覆盖奖励。
+
+完整证据组、部分支持和无支持保持不同状态。完整组放不进预算时选择真实可披露部分；trace 记录缺失义务，不把部分图像、孤立 OCR 或一张“之后”的图片宣布为已经完成前后比较。
+
+### 20.7 响应装配与多维预算
+
+Multimodal 响应的 `data[].content` 返回有序图文数组。一个证据包将来源文本/时间标识与对应原图相邻放置；多个来源组成的包使用由 atom IDs、顺序及表示版本派生的稳定 bundle ID，不能冒用单个 Source ID。Textual/Coding 响应仍使用字符串。
+
+    content = [
+      source_label_and_exact_text,
+      original_image_data_uri,
+      next_source_label_and_exact_text,
+      next_original_image_data_uri
+    ]
+
+系统导航标签与来源原文分别标识。官方 image_url 只携带实际 Base64 Data URI；内部 asset ID、S3 路径或“请再下载图片”的占位内容不能替代图片。原图按原始字节返回，派生 crop 需要记录父图和 transform，不能把裁剪图当完整原图。
+
+预算同时检查：
+
+| 约束 | 处理方式 |
+|---|---|
+| `len(data) <= top_k` | bundle 是一个返回候选；不靠多返回条目补齐预算 |
+| 单图 ≤10 MiB、响应总媒体 ≤30 MiB | 按实际解码字节计数，去重后仍按响应实际发送次数计算 |
+| HTTP body | 估计 Base64 的约 4/3 膨胀及 JSON/text 开销；网关与应用上限分别配置 |
+| Answer input tokens | 延用总输入窗口预算，增加与实际 Answer 模型/分辨率一致的图像 token 估计 |
+| 依赖完整性 | 优先把必要原图、时间证据和例外放在同一可容纳的包内，再排序候选 |
+| 语义装配 | 不在图片 Base64 中间截断；不因文本 token 预算耗尽产生无法解码的图片 |
+
+117,760 是官网给出的 Answer 输入 token 上限，不能当作纯文字额度后再无成本附加图片。平台按返回排序保留候选前缀，选择器应把关键完整组排在前面，并使用最终序列化形态重新计算预算。预算不足可以少返回候选，不能悄悄把不完整图片交给平台。
+
+当前审计中间件的正文捕获上限与入站请求上限是两件事。多模态诊断只记录 part 数、图片字节/尺寸、namespace 作用域指纹、阶段状态和耗时；正式运行不复制 Base64、截图、OCR 正文或源码到普通日志。公开研究的可选完整审计另行受数据/容量配置控制。
+
+### 20.8 记忆演化、个性化与媒体治理
+
+视觉实体/物品的变化沿有证据的事件链管理。相同物体外观发生变化时保留旧原图和旧状态；两张相似图片不能仅凭 embedding 被确认为同一件物品。用户在某情景对某图片的偏好保留情景与时间，不从照片中的对象推断未经陈述的长期偏好。
+
+删除与禁止披露从 source/part/asset/region 的授权范围求闭包，覆盖 OCR、caption、观察、向量、postings、图边、摘要、crop、缓存和待发布任务。在线可见性先被政策 generation 阻断；异步任务提交时再次校验 tombstone。相同字节在多个 namespace 下采用独立授权引用，删除一个用户的来源不会跨用户扩散；物理对象仅在所有合法引用都已解除后回收。
+
+若图片中同时包含允许与禁止披露区域，不能在文字过滤后仍返回完整原图。只有经过可追溯遮盖的允许版本可返回；遮盖未完成时不交付该图，仍可返回其他有支持的证据。WAL、备份和外部副本继续按统一删除协议记录实际完成状态。
+
+### 20.9 三组能力与十四项工程验收
+
+下表是按用户提供的 7/4/3 分组制定的工程验收 ID，并非重新命名官网底层六类能力。具体数据集原始 category/point 及其到三组能力的映射写进数据 manifest，不能混用 AML 分类、ATM 指标与 Mem-Gallery 的标签。
+
+| 组 | 工程验收 |
+|---|---|
+| 记忆认知，7 项 | M-A1 文本找图；M-A2 图像找文字；M-A3 图像找图像；M-A4 OCR/数字实体召回；M-A5 颜色/位置/布局取证；M-A6 跨会话图文关系多跳；M-A7 组合问题的互补证据完整性 |
+| 记忆演化，4 项 | M-B1 多时间与事件顺序；M-B2 视觉属性变化与旧状态恢复；M-B3 来源纠正/冲突与实体同一性修订；M-B4 增量 Add 可见且不使用未来会话 |
+| 记忆对齐，3 项 | M-C1 有情景依据的个性化；M-C2 缺失/矛盾视觉证据时的拒答与不确定性；M-C3 文图统一来源与披露治理 |
+
+ATM 原生视频用于离线研究时按带时间戳 frame source 适配，并保留视频到帧的 locator；AML 现行图文协议没有新增 video/audio part。本版本公开接口的媒体范围是图片，原生视频实验独立记录其输入与采样协议。
+
+
+## 21. 共享 schema、模型服务与代码迁移
+
+### 21.1 schema v5 目标与索引身份
+
+当前运行 schema 是 v4。以下定义 v5 目标迁移；本次文档更新不执行数据库迁移。
+
+| 表族 | 目标键与职责 |
+|---|---|
+| `ee_source_parts`、`ee_part_spans` | `(ns, source_id, part_ordinal[, span_id])`；原始顺序与分 part 精确文本 |
+| `ee_media_assets`、`ee_media_occurrences`、`ee_visual_regions`、`ee_visual_observations` | namespace 媒体授权、原图身份、来源出现、区域和结构化观察 |
+| `ee_repositories`、`ee_code_snapshots`、`ee_commit_parents` | 仓库作用域、提交 DAG 与 dirty overlay |
+| `ee_file_revisions`、`ee_symbol_revisions` | 版本限定的代码定位、符号/路径索引 |
+| `ee_engineering_events`、`ee_patch_attempts`、`ee_test_runs`、`ee_experiences` | 轨迹、补丁、测试、决策/结果及适用条件 |
+| `ee_representations`、`ee_vector_collections` | 表示身份、模型与预处理版本、向量维度、所属索引集合 |
+| `ee_evidence_atoms`、扩展依赖边 | 原子类型、定位与来源授权；查询中组装的包无需持久化为事实 |
+
+所有领域主键、外键、词法统计与图路径携带 namespace。repo_id 与 asset hash 不能替代 user 隔离。扩展现有来源依赖以表达 `source → part → asset/region/file/test → observation/experience/representation`；删除求传递闭包，不能只删除 ee_objects 的直接 source_id 依赖。
+
+现有向量主键是 `(ns,id)`，无法表示同一图片的多个模型/视图。新键至少包含 `(ns, owner_id, representation_id)`；`representation_id` 固定 `adapter + view_kind + model/revision + dimensions + preprocessing + schema`。不同模型空间或维度使用独立 pgvector 集合与 HNSW 索引；当前文本向量可以作为一个已登记集合继续读取。不能把不同维度向量强行填进现有 vector 列，也不能只更换模型配置却复用旧向量。
+
+迁移先扩展 reader 与表，再按来源重建表示并进行 generation 双读对照。原有 Source 字符串原件不变，适配视图把它看作 ordinal=0 的文本 part；多模态来源通过 SourceEnvelope 持有原始有序 Content。领域新增对象通过明确解码器恢复，不能把新 JSON 类型直接交给旧 `Node(**data)` 路径。
+
+### 21.2 文件级实施合同
+
+| 当前文件/模块 | 修改或新增的具体职责 |
+|---|---|
+| `api/app.py`、`domain/requests.py` | 判别式 ContentPart、字符串兼容、QueryBundle、媒体限制、按部署配置选择 adapter |
+| `domain/models.py` | SourceEnvelope、分 part span、版本限定工程对象、媒体/区域与 EvidenceAtom |
+| `ingest/`、拟新增 `adapters/coding/` | 官方字符串轨迹解析、原生事件归一化、repo/snapshot/attempt 关联、代码解析及观察抽取 |
+| 拟新增 `adapters/multimodal/` | 媒体解码、SGM/OCR/region、图文 Query 处理、原图响应装配 |
+| `pipeline.py` | 共享幂等/发布协议调用领域 prepare_write；必需表示完成后才提交；Search 保持无事实写回 |
+| `providers/` | 类型化 VLM/OCR/VL embedding/rerank 请求，模型政策校验，域内预算与调用计量 |
+| `storage/schema.py`、`migrate.py`、`repository.py` | v5 表、表示集合、媒体发布/删除状态、领域对象与来源依赖事务 |
+| `storage/view.py` | 图文/代码索引查询、版本/时态/授权过滤；保持 namespace 先过滤 |
+| `retrieval/engine.py`、`graph.py` | 统一候选协议、领域独立召回臂、按义务重排、领域缺口动作 |
+| `retrieval/proofs.py`、`selection.py` | source-ID 组升级为 typed atoms；兼容假设/视觉支持/前提组联合 Beam |
+| `retrieval/evidence.py`、`disclosure.py`、`tokens.py` | 字符串与 ContentPart[] 分别装配；代码精确 span、图片/裁剪来源、多维最终预算 |
+| `governance/` | part/asset/snapshot/representation 的授权与删除闭包、在途作业提交检查 |
+| `api/audit.py`、`observability/` | 统计图像数量/解码与传输字节、版本核验、每义务候选覆盖；诊断不复制媒体正文 |
+| `experiments/` | Coding 执行 harness adapter、ATM 与 Mem-Gallery adapter、版本绑定与配对消融 |
+
+所有 `.strip()`、`len(content)`、`source.render()`、字符串切片、JSON 序列化和 token 计算调用点都必须按内容类型处理，不能只放开 Pydantic 类型后让旧检索器接收数组。已有 gpt-4o-mini provider 的字符串 user message 构造也需要实际传递 image parts，不能把数组 JSON 字面量当图像输入。
+
+### 21.3 模型政策与部署
+
+官网详细中英文文档要求开源方法的 LLM 相关组件使用 gpt-4o-mini、embedding 使用 text-embedding-v4，reranker 不限；Full checklist 中有更简略的 Add 表述。正式配置按详细规则登记。当前没有核验到视觉 embedding 的例外授权，因此本设计完整保留两种独立模型政策：
+
+| 配置 | 生成式处理 | 检索表示与视觉使用 | 用途 |
+|---|---|---|---|
+| competition | gpt-4o-mini 执行文本/图文抽取、规划、视觉支持核验 | text-embedding-v4 编码原文/代码文本/SGM/OCR；原图供图文规划、允许的多模态重排及 Answer 使用 | 与已核验开源规则一致的正式候选 |
+| research | manifest 固定所研究的模型与版本 | 增加代码 embedding、Qwen3-VL 等原图/区域 embedding、不同 VLM；保留统一证据合同 | 全能力研发与逐组件实验 |
+
+competition 仍是完整接收、保存、检索和交付原始图片的系统；没有视觉向量时，通过 SGM/词法/关系候选与原图重排取证。跨模态向量路径在 research 下完整实现和评测；将来若规则明示允许，经过模型清单审核后形成新的正式版本，不能在运行中的版本自动切换。
+
+部署按来源/PG、对象存储、文本模型请求、视觉模型请求、代码解析、文本重排和图文重排分配资源。GPU 模型有健康就绪检查、有界 batch、内存与排队预算；app readiness 检查已声明必需的服务。写入和检索分别调度，避免重排排队挤占已经接收的 Add。每个阶段记录耗时、字节、候选数、命中臂、降级状态和 model identity，容量声明从实际混合负载测得。
+
+### 21.4 来源行为迁移
+
+为每个迁移模块建立 behavior capsule：固定上游 commit、完整输入/输出、模型 prompt、解析器、默认常量、排序与并列规则、候选预算、回退和错误语义。先保留上游复现配置，再在同样来源/候选上评估 EviEpoch 变化；“无语义损失”由原始来源恢复和模块行为对照验收。
+
+需要明确登记的行为变化包括：把 claude-mem 的异步观察队列改成符合 AML 的同步发布；将其分层工具读取移入单次 Search；用 EviEpoch 的 BM25/PG 取代旧版的 Chroma 依赖；用版本适用性取代通用 90 天硬过滤；为 ATM 增加原生图片 Query；用真实 MIME 取代参考 formatter 的固定 JPEG 标记；扩展 Mem-Gallery loader 对多张图片的来源保留。
+
+v12.1.1 的实际 LICENSE 为 AGPL-3.0，当前 claude-mem 15.8.2 的 package 标注不能替历史版本代码更换许可。直接迁移的文件保留其实际版本的许可、作者、修改记录和依赖来源；迁移包的许可信息进入项目的第三方归属清单。基线、改进版及其他上游代码各自记录，不把方法参考伪装成代码直接复用，也不把直接复用标成原创算法。
+
+## 22. 研究假设、对照与验收
+
+### 22.1 可检验的研究主张
+
+| 主张 | 对照方式 | 失败信号 |
+|---|---|---|
+| Coding 的版本适用性与失败经验能抵抗高相似干扰 | 同历史、同 Coding Agent、同预算，对比无版本/无反例/完整版本 | 噪声下解决率无增益或错误迁移增加 |
+| 原图与字段来源分离能保留 caption 遗漏的视觉细节 | 固定 caption/OCR，依次增加原图视图、区域/时间和多模态重排 | 提高文本相关性但视觉证据/最终回答没有改善 |
+| 领域假设与 typed proof 联合选择能提高必要证据完整性 | 完全相同候选和预算，对比独立 Top-K、greedy、现有 source-ID Beam、typed Beam | 效果仅来自多召回候选，等候选后差异消失 |
+| 写入侧结构化能降低 Search 缺口成本 | 同来源与最终质量，同时记录 Add 成本和 Search 模型调用/延迟 | Search 更快但漏掉关键前提，或总成本仅转移且没有收益 |
+
+这些是待测研究主张，不能用模块已经存在或合成控制题通过来宣称成立。
+
+### 22.2 Coding 评测
+
+官网确认 CAMBench Coding 的 150 个基础任务分别在 relevant 与 noisy 历史下运行，共 300 次尝试。99 个缺陷修复、51 个功能增强及四档噪声作为用户提供的切片配置，实际样本分配写入 dataset manifest；不把四档误计为官网每档都重复全部 150 题。SWEContextBench 当前只是官网参考目录，独立列作泛化评测。
+
+| 组 | 方法 |
+|---|---|
+| K0 | 无历史记忆，相同 Coding Agent |
+| K1 | 原始工程历史 + 当前 Dense/BM25 |
+| K2 | 固定 claude-mem v12.1.1 的观察/恢复基线 |
+| K3 | EviEpoch 工程观察 + 精确路径/符号 + 版本适用性 |
+| K4 | K3 + decision/outcome、失败/回滚和反例 |
+| K5 | K4 + 领域义务、typed proof 联合选择与缺口取证 |
+
+K2 保留并记录实际模型、Chroma 配置、同步等待和旧版行为；另建同模型/同预算的受控配置，不能把未匹配的论文/榜单数字当作 K2 本地结果。代码 embedding 单独作为 research 消融，避免将模型变化混入版本机制贡献。
+
+固定执行 Agent、初始仓库快照、依赖、工具权限、运行预算、验证测试和随机种子。每次任务在独立 checkout/container 中执行；不同实验臂不共享修改后的工作树、经验增量或缓存。按 repo/issue/commit 簇划分数据，避免把同一修复的近邻版本分散到训练与测试。
+
+主要指标为任务解决率，分别报告 bugfix、feature、relevant/noisy、四档噪声与配对区间；同时报告必要工程证据召回、版本误匹配率、错误 patch 迁移率、失败经验命中、负迁移率、Add/Search/执行成本和延迟。负迁移是加入历史后原本能解决的任务反而失败，不能只看检索命中数。
+
+### 22.3 Multimodal 评测
+
+ATM-Bench 与 Mem-Gallery 分别适配，不重写为一套混合总分。固定每组 caption/OCR 输入来源、Answer 模型、judge、上下文与媒体预算；预计算字段可用于公开基线，不能把 gold answer、gold evidence ID 或未来会话作为检索特征。
+
+| 组 | 方法与要验证的贡献 |
+|---|---|
+| M0 | Caption-only + Dense：文本化记忆基线 |
+| M1 | M0 + OCR/时间/实体/属性的独立表示与过滤 |
+| M2 | M1 + 原图/区域视觉 embedding，测 caption 未表达细节 |
+| M3 | M2 + 来源区域、跨会话关联、时间/修订状态 |
+| M4 | M3 + 多模态 rerank 和 typed proof 集合选择 |
+
+M2–M4 的视觉 embedding 配置属于 research。competition 另从 M1 加入原图重排、视觉核验、时序/区域来源及集合选择，形成模型政策匹配的消融。ATM 的 dual-concat、原始视觉 Oracle 和指定 gold evidence 的上界分别列组；Oracle 不进入正式检索路径。
+
+ATM 报告原协议的 QA/judge 指标及 source-level R@K；Mem-Gallery 报告其答案 F1、检索 Precision/Recall/HitRate 和可选 judge 指标。二者均补充原图召回、视觉支持正确率、完整证据组率、Query-image 使用率、跨会话/时间错误、OCR 错误传播、禁止披露率，以及 token/decoded_bytes/wire_bytes/耗时。只提升 source recall 不能替代最终答案质量。
+
+Mem-Gallery 当前 runner 先写完对话再问 QA；流式实验应另定义前缀 generation 与每题可见会话，不能把原脚本当成已经测试增量场景。其 `point` 标签与 AML 的 7/4/3 分组分别保存。
+
+### 22.4 接口与状态验收矩阵
+
+- Coding：相同路径的不同 repo、分叉/合并/回滚、dirty overlay、符号重命名、已移除 API、失败后成功、测试在错误 tree 上通过、缺失验证、完整 diff 与源代码 round-trip。
+- 多模态：有序 text-image-text、多张图片、image-only Query、无 caption 图片、JPEG/PNG/WebP MIME、10/30 MiB 边界、错误 Base64、文本/图像互相矛盾、caption 遗漏颜色/位置、同图多来源及相似物品误合并。
+- 共享：重试同 payload 幂等、不同 payload 冲突、媒体写入后 PG 失败、generation 冲突、删除与在途作业竞争、所有表示的来源闭包、旧缓存与跨 namespace 请求。
+- 输出：代码精确 span、图片可解码及 hash、part 顺序、bundle ID、top_k、序列化 token/媒体预算、关键前提不被拆散、删除后不通过原图或 OCR 复活。
+- 行为对照：上游 capsule 的 parser、prompt/字段、候选顺序、timeline、完整读取及错误回退；记录所有主动偏离，评估前不把两个配置当成同一算法。
+
+正确性检查先验证原始来源与协议，再验证检索证据和最终执行/作答。小型合成样例只验证具体故障模式；自然公开、按仓库/会话封存的测试负责评估泛化能力。
+
+## 23. 完整实施顺序与交付物
+
+以下顺序表达依赖关系，完成范围包含两条扩展的全部链路。
+
+| 阶段 | 交付物 | 完成标准 |
+|---|---|---|
+| E0 来源与复现锁定 | 上游 commit/许可、behavior capsule、官方协议/模型清单、数据切分 | 输入/输出/默认分支可核对，复现和改进配置分别登记 |
+| E1 共享领域与发布层 | SourceEnvelope、typed atoms、schema v5、表示集合、媒体 staging/发布/删除 | 文本兼容，跨表示来源闭包和 generation 可见性成立 |
+| E2 Coding 写入与召回 | 工程事件、快照/符号、观察/决策结果、版本索引、分层恢复 | 能从标准字符串与原生事件得到相同来源限定语义，正确保留失败与未知状态 |
+| E3 Multimodal 写入与召回 | 有序 parts、原图、SGM/OCR/region、图片 Query、多路检索 | 原图入库到最终响应完整连通，视觉义务不会被 caption 代替完成 |
+| E4 联合求解与证据交付 | 版本/实体/时间假设、typed Beam、域内重排、缺口动作、最终预算 | 同候选下可比较 Top-K/greedy/Beam，代码与视觉必要前提有完整性记录 |
+| E5 研究与容量 | K0–K5、M0–M4、Mem-Gallery 泛化、噪声/版本/视觉切片、真实混合负载 | 任务/答案结果、证据指标、置信区间、资源成本及降级率共同报告 |
+| E6 版本冻结 | 各 task adapter 的镜像/配置、模型/索引身份、migration、Smoke 与回滚方案 | 实际通过的版本与清单一致，所有能力和未通过项按证据登记 |
+
+release manifest 新增 `task_adapter`、source/part schema、repo snapshot policy、符号解析器版本、视觉模型/预处理、媒体 MIME/大小上限、representation collections、typed proof/packer 版本、图片 token estimator、上游 capsule/compatibility patch、数据集 category 映射及各实验臂身份。
+
+Coding 写入/召回与 Multimodal 有序图文写入、原图存储和 Search 图文交付已进入运行代码（schema v5/v6）。Typed proof、视觉 embedding research 臂、区域裁剪、媒体治理闭包和 K/M 评测仍按上表验收，不由文本 Smoke 代替。

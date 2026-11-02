@@ -5,7 +5,7 @@ import time
 
 import numpy as np
 
-from ..observability.diagnostics import log_provider_failure, log_provider_success
+from ..observability.diagnostics import log_dataflow_event, log_provider_failure, log_provider_success
 from .errors import ProviderUnavailable
 
 
@@ -33,9 +33,11 @@ class RerankerClient:
                     indices = sorted({round(i * (count - 1) / (keep - 1)) for i in range(keep)})
                 return [text[index * size:(index + 1) * size] for index in indices]
 
-            response = httpx.post(self.config.rerank_url, json={"query": query, "documents": [
-                {"id": sid, "segments": segments(source.content)} for sid, source in sources.items()]},
-                timeout=timeout)
+            documents = [{"id": sid, "segments": segments(source.content)} for sid, source in sources.items()]
+            log_dataflow_event("reranker_request", model=self.config.rerank_model_path,
+                               candidate_count=len(documents), query=query, documents=documents)
+            response = httpx.post(self.config.rerank_url, json={"query": query, "documents": documents},
+                                  timeout=timeout)
             response.raise_for_status()
             payload = response.json()
             rows = payload.get("scores") if isinstance(payload, dict) else None
@@ -53,6 +55,8 @@ class RerankerClient:
                 scores[sid] = score
             if set(scores) != set(sources):
                 raise ValueError("reranker must return exactly the supplied candidate IDs with finite scores")
+            log_dataflow_event("reranker_response", candidate_count=len(scores), scores=[
+                {"id": sid, "score": scores[sid]} for sid in sorted(scores)])
             log_provider_success(stage="rerank", duration_ms=(time.perf_counter() - started) * 1000)
             return scores
         except Exception as exc:

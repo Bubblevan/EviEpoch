@@ -104,6 +104,29 @@ The existing Compose project and named SQLite volume were preserved. The applica
 
 One synthetic provider-backed Add and Search were run through the container application endpoint: Add HTTP 200 in 3,141 ms; Search HTTP 200 in 1,680 ms and returned the matching marker. This is a single functional probe, not a concurrency measurement. The exported .com audit file contained 3 records (Add 200: 1, Search 200: 2), all synthetic; request bodies were present and are stored locally at Downloads/EviEpoch-bbroot-audit-20261029. No official Smoke or Full was started.
 
-The .com service is configured for 16 concurrent Add and 16 concurrent Search requests, 1.5 CPU cores, 700 MiB RAM, 1 MiB per captured body, 8 GiB audit storage, and 30-day retention. A post-restart observation showed about 49 MiB container memory use and 32 GiB free root disk. No 16-way load run was performed on this instance, so its provider-backed concurrency capacity remains unverified.
+The .com service is configured for 16 concurrent Add and 16 concurrent Search requests, 1.5 CPU cores, 700 MiB RAM, 1 MiB per captured body, 8 GiB audit storage, and 30-day retention. The public provider-backed 8-way and 16-way results are recorded below.
 
 Before the update, an online SQLite backup was stored at /var/backups/eviepoch-bbroot-20261029/eviepoch-v1-pre-audit.sqlite3 and the previous image was tagged eviepoch-ecs/eviepoch:pre-audit-20261029. The existing .env was not replaced. The deployed image includes the AMI MIT license notice.
+
+
+## 2026-10-29 public route and light-load follow-up
+
+The .de5.net service remained active, but its Caddy site config had been replaced by a payment-focused config with no EviEpoch routes. Exact Add/Search/health proxy routes have now been restored and Caddy validated/reloaded without changing payment routes. Public versioned health is 200/TLS-valid; unauthenticated Add/Search are 401. An authenticated top_k=0 Search through Caddy returned 200 and was audited. Historical official Smoke bodies from before audit enablement are not available; the latest .de5 logs contain 53 synthetic records, as listed in DEPLOYMENT.md.
+
+A light 4-way test on the .com instance used synthetic data and top_k=100 Search through its Caddy TLS listener: Add 4/4 HTTP 200 (p50 3.53 s; p95/p99 4.97 s); Search 4/4 HTTP 200 (p50 5.29 s; p95/p99 9.84 s); all 4 searches matched their markers. This ran through the server's loopback Caddy listener with domain SNI, not across the external WAN. The latest .com audit export after the additional public tests and Token recheck contains 63 synthetic records: Add 200: 31 and Search 200: 32. These include the prior 4-way sample, authenticated zero-work checks, and the public 8-way and 16-way waves below.
+
+
+## 2026-10-29 public provider-backed concurrency test
+
+This test was sent from the Windows workstation through https://bubblevan.bbroot.com using the valid instance token and TLS verification. Each wave used a unique synthetic user, one seeded synthetic evidence item, Add messages with unique request IDs, Search top_k=100, and no client retries. Add and Search began simultaneously. The timing includes the WAN/TLS path and provider latency.
+
+| Concurrent Add | Concurrent Search | Total client requests | Add result and latency | Search result and latency | Wave time |
+|---:|---:|---:|---|---|---:|
+| 8 | 8 | 16 | 8/8 HTTP 200; p50 19,469.90 ms; p95/p99 21,618.74 ms | 8/8 HTTP 200; 8/8 seeded evidence matches; p50 9,983.21 ms; p95/p99 18,142.04 ms | 21.65 s |
+| 16 | 16 | 32 | 16/16 HTTP 200; p50 35,474.54 ms; p95/p99 35,968.56 ms | 16/16 HTTP 200; 16/16 seeded evidence matches; p50 16,993.01 ms; p95/p99 33,220.44 ms | 35.98 s |
+
+Both batches reached the configured per-route ceiling of 16 Add and 16 Search and returned no HTTP errors. These are single batches, not a sustained soak test or evidence for concurrency above the configured limit. At 16, Add latency approaches the configured 40-second provider timeout; the service was not reconfigured above 16.
+
+After the 16-way batch, the container was healthy with zero restarts. Cgroup memory current was 189,435,904 bytes and peak 200,167,424 bytes (about 181 MiB and 191 MiB, respectively, under a 700 MiB limit); memory.events reported zero high, max, oom, and oom_kill events. Host available memory was about 951 MiB, swap was unused, and root disk had about 32 GiB free. CPU was not continuously sampled during the requests, so no CPU peak is claimed.
+
+The latest SCP export is under Downloads/EviEpoch-bbroot-audit-20261029-capacity: 63 JSONL records, Add 200: 31 and Search 200: 32. After the env re-application and container recreation, public Health returned 200, valid-token top_k=0 Search returned 200, and invalid-token Add/Search both returned 401. The prior local credential already matched the submitted value and had worked before recreation. The records correspond to synthetic probes, load tests, and this zero-work auth check; this turn did not run official Smoke or Full. The application and SQLite volume run on the ECS in Docker; Caddy on that same ECS provides public HTTPS and forwards only to loopback 127.0.0.1:8012. No reverse SSH tunnel to the laptop is involved.

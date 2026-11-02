@@ -35,10 +35,10 @@ _TEMPORAL_RELATION_QUERY = re.compile(
 def fuse(channels: list[dict[str, float]], k: int = 60) -> dict[str, float]:
     return merge(channels, k)[0]
 
-def retrieve(view, request, plan: QueryPlan, providers, config):
+def retrieve(view, request, plan: QueryPlan, providers, config, task_adapter=None):
     started = time.perf_counter()
     timings = {}
-    queries = list(dict.fromkeys([request.query] + [o.query for o in plan.obligations]))
+    queries = list(dict.fromkeys([request.query_text] + [o.query for o in plan.obligations]))
     vectors = providers.embed(queries)
     timings["embedding"] = (time.perf_counter() - started) * 1000
     stage = time.perf_counter()
@@ -54,7 +54,7 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
         temporal_modes.append(("valid", plan.as_of.earliest or plan.as_of.latest, plan.as_of.latest))
         temporal_modes.append(("mention", plan.as_of.earliest or plan.as_of.latest, plan.as_of.latest))
     if (set(plan.intents) & {"comparison", "history", "order"}
-            or _TEMPORAL_RELATION_QUERY.search(request.query)):
+            or _TEMPORAL_RELATION_QUERY.search(request.query_text)):
         temporal_modes.append(("occurrence", None, None))
     if plan.order_by == "first_mention":
         temporal_modes.append(("asserted", plan.as_of.earliest, plan.as_of.latest))
@@ -63,16 +63,36 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
     temporal_candidates = {}
     for mode, date_start, date_end in temporal_modes:
         retrieved_temporal = view.temporal(date_start, config.candidate_limit, date_end=date_end,
-                                           mode=mode, query=request.query)
+                                           mode=mode, query=request.query_text)
         if retrieved_temporal:
             channels.append(retrieved_temporal)
             temporal_candidates.update(retrieved_temporal)
             channel_names.append(f"temporal_{mode}")
-    graph_candidates = retrieve_graph(view, request.query, plan, config)
+    graph_candidates = retrieve_graph(view, request.query_text, plan, config)
     if graph_candidates:
         channels.append(graph_candidates)
         channel_names.append("graph")
+    if task_adapter is not None:
+        extension = task_adapter.extend_retrieval(view, request, plan)
+        for channel, name in zip(extension.extra_channels, extension.channel_names):
+            if channel:
+                channels.append(channel)
+                channel_names.append(name)
+        if extension.trace:
+            coding_trace = extension.trace
+        else:
+            coding_trace = {}
+    else:
+        coding_trace = {}
     fused, channel_ranks = merge(channels, cap=config.candidate_limit, names=channel_names)
+    if task_adapter is not None:
+        with view.repo.view(view.ns) as db_view:
+            if getattr(task_adapter, "__class__", type(task_adapter)).__name__ == "MultimodalAdapter":
+                from ..adapters.multimodal.search import promote_multimodal_hits
+                fused = promote_multimodal_hits(db_view, fused)
+            else:
+                from ..adapters.coding.search import promote_coding_hits
+                fused = promote_coding_hits(db_view, fused)
     ranked = sorted(fused, key=lambda oid: (-fused[oid], oid))[:config.candidate_limit]
     coverage_ids = []
     coverage_truncated = False
@@ -122,7 +142,7 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
             snap.edges = list({e.id: e for e in snap.edges + linked.edges}.values())
             if not frontier:
                 break
-    relation_channel = (_relation_candidate_channel(snap, seed_ids, request.query, config.graph_depth)
+    relation_channel = (_relation_candidate_channel(snap, seed_ids, request.query_text, config.graph_depth)
                         if config.relations_enabled else {})
     if relation_channel:
         # Dense, lexical, temporal, and graph-expanded relation candidates now
@@ -134,22 +154,22 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
     for span_id, span in snap.spans.items():
         if span_id in fused and span.source_id in source_scores:
             source_scores[span.source_id] = max(source_scores[span.source_id], fused[span_id])
-    transfer_sources = [sid for sid, source in snap.sources.items() if worked_example_for_reference(request.query, source)]
+    transfer_sources = [sid for sid, source in snap.sources.items() if worked_example_for_reference(request.query_text, source)]
     if transfer_sources and "procedure" not in plan.intents:
         plan.intents.append("procedure")
     for node in snap.nodes.values():
         score = fused.get(node.id, 0.0)
         # Temporal state preference only adjusts query-relevant objects, never arbitrary recent facts.
-        lexical = overlap(request.query, node.representation())
+        lexical = overlap(request.query_text, node.representation())
         if lexical:
             score += _time_weight(node, plan, snap) * 0.03
         for sid in node.source_ids:
             source_scores[sid] = max(source_scores.get(sid, 0), score)
     # A completely unrelated namespace should not turn dense nearest-neighbours into positive evidence.
-    relevant = any(overlap(request.query, s.content) > 0 for s in snap.sources.values())
+    relevant = any(overlap(request.query_text, s.content) > 0 for s in snap.sources.values())
     if not relevant and hasattr(providers, "verify_candidates") and (
             config.profile != "full" or not hasattr(providers, "bind_obligations")):
-        valid_ids = providers.verify_candidates(request.query, snap.sources)
+        valid_ids = providers.verify_candidates(request.query_text, snap.sources)
         snap.sources = {sid: s for sid, s in snap.sources.items() if sid in valid_ids}
         snap.nodes = {nid: n for nid, n in snap.nodes.items() if set(n.source_ids) <= snap.sources.keys()}
 
@@ -165,7 +185,7 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
         if not config.rerank_enabled:
             return False
         pool_ids = _bounded_rerank_ids(snap, source_scores, fused, temporal_candidates.keys(),
-                                       request.query, config, scope)
+                                       request.query_text, config, scope)
         if not pool_ids:
             return False
         if reranker is None or not config.rerank_url:
@@ -175,7 +195,7 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
         rerank_started = time.perf_counter()
         try:
             rerank_attempts += 1
-            scores = reranker(request.query, pool)
+            scores = reranker(request.query_text, pool)
             valid_scores = isinstance(scores, dict) and set(scores) == set(pool)
             if valid_scores:
                 try:
@@ -221,7 +241,7 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
                        and hasattr(providers, "bind_obligations"))
     if binding_enabled:
         try:
-            plan = bind_proofs(plan, snap, request.query, providers, config)
+            plan = bind_proofs(plan, snap, request.query_text, providers, config)
             binding_status = "bound" if any(o.alternatives for o in plan.obligations) else "empty"
         except (InvalidExtraction, ProviderUnavailable) as exc:
             binding_status = "invalid" if isinstance(exc, InvalidExtraction) else "unavailable"
@@ -242,7 +262,7 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
         snap.spans.update(extra.spans)
         snap.edges = list({e.id: e for e in snap.edges + extra.edges}.values())
         for sid, source in extra.sources.items():
-            source_scores.setdefault(sid, fused.get(sid, overlap(request.query, source.content) * 0.01))
+            source_scores.setdefault(sid, fused.get(sid, overlap(request.query_text, source.content) * 0.01))
     current_proof_sources = {sid for obligation in plan.obligations
                              for group in obligation.alternatives for sid in group}
     supplemental_scope = (local_proof_sources | current_proof_sources | gap_source_ids
@@ -256,7 +276,7 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
     plan = refresh_proofs()
     if gap_source_ids and binding_enabled and binding_status not in {"invalid", "unavailable"}:
         try:
-            plan = bind_proofs(plan, snap, request.query, providers, config)
+            plan = bind_proofs(plan, snap, request.query_text, providers, config)
             binding_status = "bound" if any(o.alternatives for o in plan.obligations) else "empty"
         except (InvalidExtraction, ProviderUnavailable) as exc:
             binding_status = "invalid" if isinstance(exc, InvalidExtraction) else "unavailable"
@@ -270,14 +290,14 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
     if coverage_ids:
         coverage_sources = {sid: snap.sources[sid] for sid in coverage_ids if sid in snap.sources}
         verify = getattr(providers, "verify_candidates", None)
-        allowed = verify(request.query, coverage_sources) if verify and coverage_sources else set()
+        allowed = verify(request.query_text, coverage_sources) if verify and coverage_sources else set()
         if not isinstance(allowed, (set, list)) or not set(allowed) <= coverage_sources.keys():
             raise ProviderUnavailable("coverage verification returned invalid IDs", stage="coverage")
         for i, sid in enumerate(coverage_ids):
             if sid in allowed:
-                plan.obligations.append(Obligation(f"coverage_{i}", request.query, alternatives=[[sid]]))
+                plan.obligations.append(Obligation(f"coverage_{i}", request.query_text, alternatives=[[sid]]))
         if coverage_truncated:
-            plan.obligations.append(Obligation("coverage_remainder", request.query))
+            plan.obligations.append(Obligation("coverage_remainder", request.query_text))
     if transfer_sources:
         live_examples = [[sid] for sid in transfer_sources if sid in snap.sources]
         if live_examples:
@@ -287,14 +307,14 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
             plan.obligations.append(Obligation("worked_example", "source-backed tool experience", alternatives=live_examples))
     evidence = {sid: Evidence(sid, source.render(), source.evidence_time,
                              source_scores.get(sid, 0.0), sid) for sid, source in snap.sources.items()}
-    token_budget = tokens.budget(config, request.query, request.options)
+    token_budget = tokens.budget(config, request.query_text, request.options)
     # Keep several exact, disjoint excerpts from oversized sources. Selection
     # treats same-source excerpts as one output slot and packs them after review.
     for sid, e in list(evidence.items()):
         if tokens.evidence_cost(config, e) <= token_budget and len(e.content) <= config.char_budget:
             continue
         matching = [s for s in snap.spans.values() if s.source_id == sid]
-        queries = [request.query] + [o.query for o in plan.obligations]
+        queries = [request.query_text] + [o.query for o in plan.obligations]
         constraint = re.compile(
             r"\b(?:except(?:ion)?s?|unless|never|must|only|not|before|after|requires?|required|"
             r"prerequisite|provided that|subject to)\b|例外|除非|禁止|必须|不得|过敏|前提|条件|仅当",
@@ -324,7 +344,7 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
         if not ranked_spans:
             continue
         source = snap.sources[sid]
-        stamp = (f"[{source.role}] " if has_disclosure_restriction(request.query)
+        stamp = (f"[{source.role}] " if has_disclosure_restriction(request.query_text)
                  else source.render()[:-len(source.content)] if source.content else source.render())
         picked, ranges = [], []
 
@@ -363,7 +383,7 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
     # A fragment never claims that its full source-level proof group was satisfied.
     recorder = getattr(providers, "record_selection", None)
     if recorder is not None:
-        recorder(request.query, plan, evidence, token_budget, config)
+        recorder(request.query_text, plan, evidence, token_budget, config)
     selected = select(plan, evidence, config, request.top_k, token_budget,
                       config.selector, pack_output=False)
     selected_ids = {e.id for e in selected}
@@ -380,7 +400,7 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
     reviewed = False
     if config.disclosure_enabled:
         from .disclosure import disclose, pack_excerpts
-        selected, reviewed = disclose(request.query, plan, selected, snap, providers)
+        selected, reviewed = disclose(request.query_text, plan, selected, snap, providers)
         if reviewed:
             selection_status = "disclosed_spans" if selected else "no_disclosable_support"
     else:
@@ -394,9 +414,9 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
     needs_span_pack = any(len(items) > 1 for items in same_source_spans.values())
     if needs_span_pack:
         # Force same-source excerpts into one return item even when top_k has room.
-        selected = pack_excerpts(request.query, selected, snap, max(0, len(selected) - 1))
+        selected = pack_excerpts(request.query_text, selected, snap, max(0, len(selected) - 1))
     elif reviewed:
-        selected = pack_excerpts(request.query, selected, snap, min(request.top_k, config.return_limit))
+        selected = pack_excerpts(request.query_text, selected, snap, min(request.top_k, config.return_limit))
     if reviewed or needs_span_pack:
         # Disclosure can split/drop a source. Reapply all final-output budgets and
         # never claim that an arbitrary excerpt completed a whole-source proof.
@@ -409,10 +429,10 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
                                            for start, _ in item.source_ranges)
     audit = getattr(providers, "audit_attribute_support", None) or getattr(providers, "audit_evidence", None)
     if (config.support_audit_enabled and audit is not None and selected and not transfer_sources
-            and not temporal_value_request(request.query, plan)
+            and not temporal_value_request(request.query_text, plan)
             and not set(plan.intents) & {"global", "list", "order", "why", "procedure", "history", "comparison"}):
         units = {e.id: replace(snap.sources[e.source_id], id=e.id, content=e.content) for e in selected}
-        support = audit(request.query, plan, units)
+        support = audit(request.query_text, plan, units)
         if (not isinstance(support, dict) or support.get("status") not in {"relevant", "insufficient", "uncertain"}
                 or not isinstance(support.get("ids"), list)
                 or any(not isinstance(eid, str) or eid not in units for eid in support["ids"])
@@ -433,7 +453,7 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
                 return ("", source.generation, source.ordinal, e.source_start, e.id)
             if plan.order_by == "event":
                 events = [n for n in snap.nodes.values() if e.source_id in n.source_ids and n.occurrence_time.earliest]
-                events.sort(key=lambda n: (-overlap(request.query, n.representation()), n.occurrence_time.earliest, n.id))
+                events.sort(key=lambda n: (-overlap(request.query_text, n.representation()), n.occurrence_time.earliest, n.id))
                 if events:
                     anchor = events[0].occurrence_time.earliest
             return (anchor, source.generation, source.ordinal, e.source_start, e.id)
@@ -466,4 +486,6 @@ def retrieve(view, request, plan: QueryPlan, providers, config):
              "source_paths": [asdict(e) for e in snap.edges],
              "channel_ranks": channel_ranks,
              "token_cost": sum(tokens.evidence_cost(config, e) for e in selected), "token_budget": token_budget}
+    if coding_trace:
+        trace["coding"] = coding_trace
     return selected, trace

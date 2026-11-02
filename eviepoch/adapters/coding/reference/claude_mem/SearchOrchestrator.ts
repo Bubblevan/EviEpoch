@@ -1,0 +1,298 @@
+import { SessionSearch } from '../../sqlite/SessionSearch.js';
+import { SessionStore } from '../../sqlite/SessionStore.js';
+import { ChromaSync } from '../../sync/ChromaSync.js';
+
+import { ChromaSearchStrategy } from './strategies/ChromaSearchStrategy.js';
+import { SQLiteSearchStrategy } from './strategies/SQLiteSearchStrategy.js';
+import { HybridSearchStrategy } from './strategies/HybridSearchStrategy.js';
+
+import type {
+  StrategySearchOptions,
+  StrategySearchResult,
+  ObservationSearchResult,
+  SearchResults,
+  SearchCategory
+} from './types.js';
+import { SEARCH_CATEGORIES, SEARCH_CONSTANTS, isCategoryRequested } from './types.js';
+import { ChromaUnavailableError } from './errors.js';
+import { projectReadKeysFor } from './project-where-filter.js';
+import { AppError } from '../../server/ErrorHandler.js';
+import { logger } from '../../../utils/logger.js';
+import { normalizePlatformSource } from '../../../shared/platform-source.js';
+
+interface NormalizedParams extends StrategySearchOptions {
+  concepts?: string[];
+  files?: string[];
+  obsType?: string[];
+}
+
+function copyCategory<K extends SearchCategory>(
+  target: SearchResults,
+  source: SearchResults,
+  category: K
+): void {
+  target[category] = source[category];
+}
+
+interface SearchRequestInput {
+  query?: unknown;
+  project?: unknown;
+  platformSource?: unknown;
+  dateRange?: { start?: unknown; end?: unknown } | null;
+  obsType?: unknown;
+  concepts?: unknown;
+  files?: unknown;
+}
+
+function isPresent(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0;
+  return value !== undefined && value !== null && value !== '';
+}
+
+/**
+ * Request-boundary check for search: a request needs query text or at least one row filter.
+ * Each SessionSearch leg returns [] when none of the filters apply to it (so an obs_type-only
+ * search is not rejected by the sessions and prompts legs), which means an empty request would
+ * otherwise come back as a silent zero-result success instead of a 400.
+ * A document category (`type: 'observations'`) selects what to search, not which rows, so it
+ * does not count as a filter.
+ */
+export function assertSearchHasQueryOrFilter(input: SearchRequestInput): void {
+  const hasDateRange = !!input.dateRange && (isPresent(input.dateRange.start) || isPresent(input.dateRange.end));
+  const hasFilter = hasDateRange
+    || [input.project, input.platformSource, input.obsType, input.concepts, input.files].some(isPresent);
+  if (!isPresent(input.query) && !hasFilter) {
+    throw new AppError('Either query or filters required for search', 400, 'INVALID_SEARCH_REQUEST');
+  }
+}
+
+export class SearchOrchestrator {
+  private chromaStrategy: ChromaSearchStrategy | null = null;
+  private sqliteStrategy: SQLiteSearchStrategy;
+  private hybridStrategy: HybridSearchStrategy | null = null;
+
+  constructor(
+    private sessionSearch: SessionSearch,
+    private sessionStore: SessionStore,
+    private chromaSync: ChromaSync | null,
+    /**
+     * Implicit window, in milliseconds, that date-less semantic searches
+     * apply (CLAUDE_MEM_SEARCH_RECENCY_DAYS); 0 disables it. Forwarded to the
+     * Chroma strategy; corpus builds bypass it per request via
+     * `ignoreDefaultRecencyWindow`.
+     */
+    private defaultRecencyWindowMs: number = SEARCH_CONSTANTS.RECENCY_WINDOW_MS
+  ) {
+    this.sqliteStrategy = new SQLiteSearchStrategy(sessionSearch);
+
+    if (chromaSync) {
+      this.chromaStrategy = new ChromaSearchStrategy(chromaSync, sessionStore, defaultRecencyWindowMs);
+      this.hybridStrategy = new HybridSearchStrategy(chromaSync, sessionStore, sessionSearch);
+    }
+  }
+
+  async search(args: any): Promise<StrategySearchResult> {
+    const options = this.normalizeParams(args);
+    assertSearchHasQueryOrFilter(options);
+
+    return await this.executeWithFallback(options);
+  }
+
+  /** Shared semantic candidate selection; callers retain their own fallback/formatting. */
+  async searchChroma(options: StrategySearchOptions): Promise<StrategySearchResult> {
+    if (!this.chromaStrategy) throw new Error('Chroma is not configured');
+    return await this.chromaStrategy.search(options);
+  }
+
+  private async executeWithFallback(
+    options: NormalizedParams
+  ): Promise<StrategySearchResult> {
+    if (!options.query) {
+      logger.debug('SEARCH', 'Orchestrator: Filter-only query, using SQLite', {});
+      return await this.sqliteStrategy.search(options);
+    }
+
+    if (this.chromaStrategy) {
+      logger.debug('SEARCH', 'Orchestrator: Using Chroma semantic search', {});
+      // Supplement genuinely empty categories before paging; an exhausted
+      // semantic page must not switch to a different keyword result set.
+      const offset = Number(options.offset ?? 0);
+      const limit = Number(options.limit ?? SEARCH_CONSTANTS.DEFAULT_LIMIT);
+      const candidateOptions = { ...options, offset: 0, limit: offset + limit };
+      let chromaResult: StrategySearchResult;
+      try {
+        chromaResult = await this.searchChroma(candidateOptions);
+      } catch (error) {
+        const errorObj = error instanceof Error ? error : new Error(String(error));
+        throw new ChromaUnavailableError(
+          `Chroma query failed: ${errorObj.message}`,
+          errorObj
+        );
+      }
+      const supplemented = await this.supplementEmptyCategories(candidateOptions, chromaResult);
+      return {
+        ...supplemented,
+        results: {
+          observations: supplemented.results.observations.slice(offset, offset + limit),
+          sessions: supplemented.results.sessions.slice(offset, offset + limit),
+          prompts: supplemented.results.prompts.slice(offset, offset + limit),
+        },
+      };
+    }
+
+    // No Chroma strategy: Chroma is turned off (CLAUDE_MEM_CHROMA_ENABLED=false).
+    // Answer from SQLite/FTS5, as SearchManager.search() does without Chroma,
+    // instead of an empty result that reads as "no matches" (#4284). Knowledge
+    // corpus builds with a query filter reach this path.
+    logger.debug('SEARCH', 'Orchestrator: Chroma not configured, falling back to SQLite', {});
+    return await this.sqliteStrategy.search(options);
+  }
+
+  /**
+   * The one Chroma-empty fallback policy, shared by this pipeline and SearchManager.search().
+   * Chroma answers with a single top-N query across every document type, so a requested
+   * category can come back empty even though SQLite would find rows: for a CJK query the
+   * prompts crowd out the observations, and a date window or an obs_type filter can drop
+   * every hit. When every requested category is empty, fall back to SQLite entirely;
+   * otherwise refill each empty category from SQLite and keep Chroma's results for the rest.
+   * No recency window is applied on the SQLite side: an exact keyword hit older than 90 days
+   * is the row this exists to surface, and the no-Chroma path applies none either.
+   * At the semantic work cap, also fill partial pages without dropping their
+   * semantic rows. These additions honor the active date window and row filters.
+   */
+  async supplementEmptyCategories(
+    options: StrategySearchOptions,
+    chromaResult: StrategySearchResult
+  ): Promise<StrategySearchResult> {
+    const requestedCategories = SEARCH_CATEGORIES
+      .filter(category => isCategoryRequested(options.searchType, category));
+    const limit = Number(options.limit ?? SEARCH_CONSTANTS.DEFAULT_LIMIT);
+    const emptyCategories = requestedCategories
+      .filter(category => chromaResult.results[category].length === 0);
+    const refillCategories = requestedCategories.filter(category =>
+      chromaResult.results[category].length === 0
+      || (chromaResult.semanticBudgetReached && chromaResult.results[category].length < limit));
+
+    if (refillCategories.length === 0) {
+      return chromaResult;
+    }
+
+    if (emptyCategories.length === requestedCategories.length) {
+      logger.debug('SEARCH', 'Orchestrator: Chroma returned zero matches for every requested category; falling back to SQLite', {});
+      return await this.sqliteStrategy.search(options);
+    }
+
+    logger.debug('SEARCH', 'Orchestrator: Supplementing semantic categories from SQLite', {
+      categories: refillCategories.join(',')
+    });
+
+    const mergedResults: SearchResults = { ...chromaResult.results };
+    let supplemented = false;
+    for (const category of refillCategories) {
+      const semanticRows = chromaResult.results[category];
+      // Empty categories keep the existing all-history fallback. A partial
+      // page at the work cap must retain its active semantic date window.
+      const dateRange = semanticRows.length > 0 && !options.dateRange
+        && !options.ignoreDefaultRecencyWindow && this.defaultRecencyWindowMs > 0
+        ? { start: Date.now() - this.defaultRecencyWindowMs } : options.dateRange;
+      const sqliteResult = await this.sqliteStrategy.search({ ...options, dateRange, searchType: category });
+      if (sqliteResult.results[category].length > 0) {
+        if (semanticRows.length === 0) {
+          copyCategory(mergedResults, sqliteResult.results, category);
+        } else {
+          const seen = new Set(semanticRows.map(row => row.id));
+          const rows = [...semanticRows, ...sqliteResult.results[category].filter(row => {
+            if (seen.has(row.id)) return false;
+            seen.add(row.id);
+            return true;
+          })];
+          if (options.orderBy === 'date_asc' || options.orderBy === 'date_desc') rows.sort((a, b) => options.orderBy === 'date_asc'
+            ? a.created_at_epoch - b.created_at_epoch || a.id - b.id
+            : b.created_at_epoch - a.created_at_epoch || b.id - a.id);
+          // Each category owns a separate SQLite ID space.
+          copyCategory(mergedResults, { ...mergedResults, [category]: rows.slice(0, limit) }, category);
+        }
+        supplemented = true;
+      }
+    }
+
+    return supplemented
+      ? { results: mergedResults, usedChroma: true, strategy: 'hybrid' }
+      : chromaResult;
+  }
+
+  async findByFile(filePath: string, args: any): Promise<{
+    observations: ObservationSearchResult[];
+    sessions: any[];
+    usedChroma: boolean;
+  }> {
+    const options = this.normalizeParams(args);
+
+    if (this.hybridStrategy) {
+      return await this.hybridStrategy.findByFile(filePath, options);
+    }
+
+    // The keys the hybrid strategy scopes its file lookup by, so turning
+    // Chroma off never changes which projects a file search reads.
+    const readKeys = projectReadKeysFor(this.sessionStore, options.project, options.projects);
+    const results = this.sqliteStrategy.findByFile(filePath, {
+      ...options,
+      projects: readKeys.length > 0 ? readKeys : undefined,
+    });
+    return { ...results, usedChroma: false };
+  }
+
+  private normalizeParams(args: any): NormalizedParams {
+    const normalized: any = { ...args };
+
+    if (normalized.concepts && typeof normalized.concepts === 'string') {
+      normalized.concepts = normalized.concepts.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+
+    if (normalized.files && typeof normalized.files === 'string') {
+      normalized.files = normalized.files.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+
+    if (normalized.obs_type && typeof normalized.obs_type === 'string') {
+      normalized.obsType = normalized.obs_type.split(',').map((s: string) => s.trim()).filter(Boolean);
+      delete normalized.obs_type;
+    }
+
+    if (normalized.type && typeof normalized.type === 'string' && normalized.type.includes(',')) {
+      normalized.type = normalized.type.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+
+    if (normalized.type && !normalized.searchType) {
+      const categories = Array.isArray(normalized.type) ? normalized.type : [normalized.type];
+      if (categories.length > 0 && categories.every((category: string) => SEARCH_CATEGORIES.includes(category as SearchCategory))) {
+        normalized.searchType = normalized.type;
+        delete normalized.type;
+      }
+    }
+
+    const dateStart = normalized.dateStart ?? normalized.date_start ?? normalized.date_from;
+    const dateEnd = normalized.dateEnd ?? normalized.date_end ?? normalized.date_to;
+    if (dateStart || dateEnd) {
+      normalized.dateRange = {
+        start: dateStart,
+        end: dateEnd
+      };
+    }
+    delete normalized.dateStart;
+    delete normalized.dateEnd;
+    delete normalized.date_start;
+    delete normalized.date_end;
+    delete normalized.date_from;
+    delete normalized.date_to;
+
+    const rawPlatformSource = normalized.platformSource ?? normalized.platform_source;
+    if (typeof rawPlatformSource === 'string' && rawPlatformSource.trim()) {
+      normalized.platformSource = normalizePlatformSource(rawPlatformSource);
+    } else {
+      delete normalized.platformSource;
+    }
+    delete normalized.platform_source;
+
+    return normalized;
+  }
+}

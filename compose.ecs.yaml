@@ -5,11 +5,46 @@ services:
     mem_reservation: 550m
     environment:
       EPOCH_AUDIT_DIR: /var/lib/eviepoch/audit
-      EPOCH_AUDIT_MAX_BODY_BYTES: "1048576"
+      EPOCH_AUDIT_MAX_BODY_BYTES: "4194304"
       EPOCH_AUDIT_MAX_DISK_BYTES: "8589934592"
       EPOCH_AUDIT_RETENTION_DAYS: "30"
+      EPOCH_PIPELINE_TRACE_ENABLED: "1"
+      EPOCH_PIPELINE_TRACE_DIR: /var/lib/eviepoch/audit
+      EPOCH_PIPELINE_TRACE_MAX_EVENT_BYTES: "4194304"
+      EPOCH_PIPELINE_TRACE_MAX_DISK_BYTES: "4294967296"
+      EPOCH_PIPELINE_TRACE_RETENTION_DAYS: "30"
+      EPOCH_ADD_CONCURRENCY: "16"
+      EPOCH_SEARCH_CONCURRENCY: "16"
+      EPOCH_RERANK_URL: http://host.docker.internal:18014/rerank
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - /var/lib/eviepoch/audit:/var/lib/eviepoch/audit
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  postgres:
+    cpus: "0.75"
+    mem_limit: 384m
+    mem_reservation: 256m
+    command:
+      - postgres
+      - -c
+      - max_connections=32
+      - -c
+      - shared_buffers=96MB
+      - -c
+      - effective_cache_size=256MB
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=48MB
+      - -c
+      - autovacuum_work_mem=32MB
+      - -c
+      - max_wal_size=512MB
     logging:
       driver: json-file
       options:

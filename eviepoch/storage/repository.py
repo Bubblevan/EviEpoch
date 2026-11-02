@@ -22,6 +22,8 @@ from ..domain import (Edge, Governance, IdempotencyConflict, IngestBusy, Node, P
 from ..retrieval.lexical import frequencies, terms
 from ..governance.lifecycle import apply_policy
 from ..governance.provenance import attach
+from .coding_schema import coding_schema
+from .multimodal_schema import multimodal_schema
 from .schema import graph_indexes, schema, temporal_indexes
 from .entities import entity_key as _entity_key, index_entity_mentions
 from .view import Connection, ReadSession, View
@@ -90,6 +92,20 @@ class Repository:
         self._conn.executescript(temporal_indexes(False) + graph_indexes())
         row = self._conn.execute("SELECT value FROM ee_metadata WHERE key='schema_version'").fetchone()
         version = int(row[0]) if row else 0
+        if version < 5:
+            self._conn.executescript(coding_schema(False))
+            self._conn.execute(
+                "INSERT INTO ee_metadata(key,value) VALUES('schema_version','5') "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+            )
+            version = 5
+        if version < 6:
+            self._conn.executescript(multimodal_schema(False))
+            self._conn.execute(
+                "INSERT INTO ee_metadata(key,value) VALUES('schema_version','6') "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+            )
+            version = 6
         if version < 3:
             spans = []
             for ns, oid, kind, raw in self._conn.execute("SELECT ns,id,kind,payload FROM ee_objects").fetchall():
@@ -227,7 +243,7 @@ class Repository:
 
     def publish(self, ns: str, request_id: str, owner: str, sources: list[Source], spans: list[Span],
                 nodes: list[Node], edges: list[Edge], policies: list[Governance], vectors: dict,
-                base_generation: int) -> int:
+                base_generation: int, coding_artifacts=None) -> int:
         with self.transaction(ns, True) as c:
             suffix = " FOR UPDATE" if self.pg else ""
             generation, policy_generation = c.execute(
@@ -272,6 +288,17 @@ class Repository:
             for policy in policies:
                 policy.through_generation = generation
                 apply_policy(c, ns, policy, generation)
+            if coding_artifacts:
+                coding_only = [a for a in coding_artifacts if a.kind.startswith("coding_")]
+                mm_only = [a for a in coding_artifacts if a.kind.startswith("multimodal_")]
+                if coding_only:
+                    from ..adapters.coding.storage import put_coding_artifacts
+                    put_coding_artifacts(c, ns, generation, coding_only, vectors,
+                                         self.config.embed_dimensions, pg=self.pg, edges=edges)
+                if mm_only:
+                    from ..adapters.multimodal.storage import put_multimodal_artifacts
+                    put_multimodal_artifacts(c, ns, generation, mm_only, vectors,
+                                             self.config.embed_dimensions, pg=self.pg)
             if policies:
                 policy_generation += 1
             c.execute("UPDATE ee_namespaces SET generation=?,policy_generation=? WHERE ns=?",

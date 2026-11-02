@@ -34,6 +34,7 @@ class Settings:
     pg_hnsw_ef_search: int = 100
     pg_hnsw_max_scan_tuples: int = 20000
     profile: str = "full"
+    task_adapter: str = "textual"
     model_policy: str = "competition"
     selector: str = "beam"
     candidate_limit: int = 120
@@ -96,6 +97,10 @@ class Settings:
     context_expansion_enabled: bool = True
     binder_window_chars: int = 3200
     coverage_source_limit: int = 32
+    media_store_path: str = "./data/media"
+    multimodal_max_image_bytes: int = 10 * 1024 * 1024
+    multimodal_max_add_bytes: int = 30 * 1024 * 1024
+    multimodal_max_response_bytes: int = 30 * 1024 * 1024
 
     @classmethod
     def from_env(cls, *, require_postgres: bool = True) -> "Settings":
@@ -116,6 +121,7 @@ class Settings:
             pg_hnsw_ef_search=_int("EPOCH_PG_HNSW_EF_SEARCH", 100),
             pg_hnsw_max_scan_tuples=_int("EPOCH_PG_HNSW_MAX_SCAN_TUPLES", 20000),
             profile=os.getenv("EPOCH_PROFILE", "full"),
+            task_adapter=os.getenv("EPOCH_TASK_ADAPTER", "textual").strip().lower(),
             model_policy=os.getenv("EPOCH_MODEL_POLICY", "competition"),
             selector=os.getenv("EPOCH_SELECTOR", "beam"),
             candidate_limit=_int("EPOCH_CANDIDATE_LIMIT", 120),
@@ -178,6 +184,10 @@ class Settings:
             context_expansion_enabled=_bool("EPOCH_CONTEXT_EXPANSION", True),
             binder_window_chars=_int("EPOCH_BINDER_WINDOW_CHARS", 3200),
             coverage_source_limit=_int("EPOCH_COVERAGE_SOURCE_LIMIT", 32),
+            media_store_path=os.getenv("EPOCH_MEDIA_STORE_PATH", "./data/media"),
+            multimodal_max_image_bytes=_int("EPOCH_MULTIMODAL_MAX_IMAGE_BYTES", 10 * 1024 * 1024),
+            multimodal_max_add_bytes=_int("EPOCH_MULTIMODAL_MAX_ADD_BYTES", 30 * 1024 * 1024),
+            multimodal_max_response_bytes=_int("EPOCH_MULTIMODAL_MAX_RESPONSE_BYTES", 30 * 1024 * 1024),
         )
 
     @property
@@ -195,6 +205,8 @@ class Settings:
             raise ValueError("Invalid consistency, window or coverage budget")
         if self.profile not in {"full", "hybrid", "b0"} or self.selector not in {"beam", "greedy", "topk"}:
             raise ValueError("Unknown profile or selector")
+        if self.task_adapter not in {"textual", "coding", "multimodal"}:
+            raise ValueError("EPOCH_TASK_ADAPTER must be textual, coding, or multimodal")
         if min(self.candidate_limit, self.graph_budget, self.beam_width, self.add_concurrency, self.search_concurrency) <= 0:
             raise ValueError("Candidate, graph, beam and concurrency budgets must be positive")
         if not 0 <= self.graph_depth <= 6 or not 0 <= self.gap_iterations <= 1 or self.extraction_chars < 256:

@@ -15,6 +15,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ..observability.diagnostics import begin_request_trace, end_request_trace
+
 log = logging.getLogger(__name__)
 _WRITE_LOCK = threading.Lock()
 _WRITE_ERROR_REPORTED = False
@@ -46,6 +48,7 @@ class PayloadAuditMiddleware:
             return
 
         started = time.monotonic()
+        trace_id, trace_token = begin_request_trace()
         request_data = bytearray()
         response_data = bytearray()
         request_truncated = False
@@ -80,15 +83,19 @@ class PayloadAuditMiddleware:
         try:
             await self.app(scope, capture_receive, capture_send)
         finally:
-            await self._write(
-                path=path,
-                status=status_code,
-                started=started,
-                request_body=bytes(request_data).decode("utf-8", errors="replace"),
-                response_body=bytes(response_data).decode("utf-8", errors="replace"),
-                request_truncated=request_truncated,
-                response_truncated=response_truncated,
-            )
+            try:
+                await self._write(
+                    path=path,
+                    status=status_code,
+                    started=started,
+                    request_body=bytes(request_data).decode("utf-8", errors="replace"),
+                    response_body=bytes(response_data).decode("utf-8", errors="replace"),
+                    request_truncated=request_truncated,
+                    response_truncated=response_truncated,
+                    trace_id=trace_id,
+                )
+            finally:
+                end_request_trace(trace_token)
 
     def _authorized(self, scope) -> bool:
         if not self.auth_token:
@@ -106,9 +113,10 @@ class PayloadAuditMiddleware:
         return False
 
     async def _write(self, *, path, status, started, request_body, response_body,
-                     request_truncated, response_truncated):
+                     request_truncated, response_truncated, trace_id):
         record = {
             "timestamp": _iso_now(),
+            "trace_id": trace_id,
             "method": "POST",
             "path": path,
             "status": status,

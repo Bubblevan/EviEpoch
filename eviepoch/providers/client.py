@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import re
 import threading
@@ -10,7 +11,7 @@ from urllib.parse import urlsplit
 import numpy as np
 
 from ..config import Settings
-from ..observability.diagnostics import log_provider_failure, log_provider_success
+from ..observability.diagnostics import log_dataflow_event, log_provider_failure, log_provider_success
 from .errors import ProviderUnavailable, StructuredOutputInvalid, StructuredOutputTruncated
 from .reranker import RerankerClient
 
@@ -143,11 +144,22 @@ class Providers:
             log_provider_failure(stage=stage, error=error, duration_ms=0)
             raise error
         started = time.perf_counter()
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        request_fields = {
+            "provider": "openai_compatible_chat",
+            "model": self.config.llm_model,
+            "stage_name": stage,
+            "temperature": 0,
+            "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
+            "messages": messages,
+        }
+        log_dataflow_event("llm_request", **request_fields)
         try:
             response = _chat_completion_with_one_extra_5xx_retry(
                 self._client(False), stage=stage,
                 model=self.config.llm_model,
-                messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+                messages=messages,
                 temperature=0, max_tokens=max_tokens, response_format={"type": "json_object"},
                 **({"extra_body": {"thinking": {"type": "disabled"}}}
                    if self.config.model_policy == "research" and self.config.llm_model.startswith("deepseek") else {}),
@@ -157,12 +169,21 @@ class Providers:
                 if response.usage:
                     self.usage["input_tokens"] += response.usage.prompt_tokens
                     self.usage["output_tokens"] += response.usage.completion_tokens
-            if response.choices[0].finish_reason != "stop":
-                if response.choices[0].finish_reason == "length":
+            choice = response.choices[0]
+            raw_content = choice.message.content or ""
+            usage = response.usage
+            log_dataflow_event(
+                "llm_response", provider="openai_compatible_chat", model=getattr(response, "model", None),
+                stage_name=stage, finish_reason=choice.finish_reason, content=raw_content,
+                usage=({"prompt_tokens": usage.prompt_tokens, "completion_tokens": usage.completion_tokens,
+                        "total_tokens": usage.total_tokens} if usage else None),
+            )
+            if choice.finish_reason != "stop":
+                if choice.finish_reason == "length":
                     raise StructuredOutputTruncated("structured completion was truncated", stage=stage)
                 raise ProviderUnavailable("structured completion did not finish normally", stage=stage)
             try:
-                value = json.loads(response.choices[0].message.content or "")
+                value = json.loads(raw_content)
                 if not isinstance(value, dict):
                     raise ValueError("expected a JSON object")
             except (ValueError, TypeError) as exc:
@@ -177,6 +198,73 @@ class Providers:
             log_provider_failure(stage=stage, error=exc,
                                  duration_ms=(time.perf_counter() - started) * 1000)
             raise ProviderUnavailable("structured model stage unavailable or invalid", stage=stage) from exc
+
+    def completion_text(self, system: str, user: str, *, max_tokens: int = 4000, stage: str = "coding_text") -> str:
+        if not self.config.llm_enabled:
+            raise ProviderUnavailable("completion requires an LLM", stage=stage)
+        started = time.perf_counter()
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        try:
+            response = _chat_completion_with_one_extra_5xx_retry(
+                self._client(False), stage=stage,
+                model=self.config.llm_model,
+                messages=messages,
+                temperature=0,
+                max_tokens=max_tokens,
+            )
+            with self._lock:
+                self.usage["chat_calls"] += 1
+                if response.usage:
+                    self.usage["input_tokens"] += response.usage.prompt_tokens
+                    self.usage["output_tokens"] += response.usage.completion_tokens
+            choice = response.choices[0]
+            if choice.finish_reason != "stop":
+                raise ProviderUnavailable("completion did not finish normally", stage=stage)
+            log_provider_success(stage=stage, duration_ms=(time.perf_counter() - started) * 1000)
+            return choice.message.content or ""
+        except Exception as exc:
+            log_provider_failure(stage=stage, error=exc, duration_ms=(time.perf_counter() - started) * 1000)
+            raise ProviderUnavailable("completion stage unavailable", stage=stage) from exc
+
+    def extract_json(self, system: str, user: str, *, max_tokens: int = 2000, stage: str = "coding_json"):
+        text = self.completion_text(system, user, max_tokens=max_tokens, stage=stage)
+        match = re.search(r"\{.*\}|\[.*\]", text, re.DOTALL)
+        if not match:
+            return text
+        return json.loads(match.group(0))
+
+    def visual_observation(self, data_uri: str, adjacent_text: str = ""):
+        from ..adapters.multimodal.vision import SGM_PROMPT
+
+        user_parts = []
+        if adjacent_text.strip():
+            user_parts.append({"type": "text", "text": f"Adjacent user text (hints only): {adjacent_text.strip()}"})
+        user_parts.append({"type": "image_url", "image_url": {"url": data_uri}})
+        started = time.perf_counter()
+        try:
+            response = _chat_completion_with_one_extra_5xx_retry(
+                self._client,
+                stage="visual_observation",
+                model=self.config.llm_model,
+                messages=[
+                    {"role": "system", "content": SGM_PROMPT},
+                    {"role": "user", "content": user_parts},
+                ],
+                temperature=0,
+                max_tokens=1200,
+            )
+            choice = response.choices[0]
+            if choice.finish_reason != "stop":
+                raise ProviderUnavailable("visual observation did not finish normally", stage="visual_observation")
+            text = choice.message.content or ""
+            log_provider_success(stage="visual_observation", duration_ms=(time.perf_counter() - started) * 1000)
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            if not match:
+                return {}
+            return json.loads(match.group(0))
+        except Exception as exc:
+            log_provider_failure(stage="visual_observation", error=exc, duration_ms=(time.perf_counter() - started) * 1000)
+            raise ProviderUnavailable("visual observation stage unavailable", stage="visual_observation") from exc
 
     def extract(self, sources, known):
         from ..ingest.extraction import EXTRACTION_PROMPT
@@ -496,14 +584,26 @@ class Providers:
         if not self.config.llm_enabled:
             return None
         started = time.perf_counter()
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        log_dataflow_event("llm_request", provider="openai_compatible_chat", model=self.config.llm_model,
+                           stage_name="completion", temperature=0, max_tokens=max_tokens, messages=messages)
         try:
             response = self._client(False).chat.completions.create(
                 model=self.config.llm_model,
-                messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+                messages=messages,
                 temperature=0,
                 max_tokens=max_tokens,
             )
-            text = response.choices[0].message.content or ""
+            raw_content = response.choices[0].message.content or ""
+            usage = response.usage
+            log_dataflow_event(
+                "llm_response", provider="openai_compatible_chat", model=getattr(response, "model", None),
+                stage_name="completion", finish_reason=response.choices[0].finish_reason,
+                content=raw_content,
+                usage=({"prompt_tokens": usage.prompt_tokens, "completion_tokens": usage.completion_tokens,
+                        "total_tokens": usage.total_tokens} if usage else None),
+            )
+            text = raw_content
             text = _REASONING.sub("", text)
             return "" if "<think>" in text else text.strip()
         except Exception as exc:
@@ -541,6 +641,9 @@ class Providers:
         for start in range(0, len(segments), batch_size):
             block = segments[start:start + batch_size]
             request_started = time.perf_counter()
+            log_dataflow_event("embedding_request", provider="openai_compatible_embeddings",
+                               model=self.config.embed_model, dimensions=self.config.embed_dimensions,
+                               encoding_format="float", input=block)
             try:
                 response = client.embeddings.create(
                     model=self.config.embed_model,
@@ -564,6 +667,20 @@ class Providers:
                     if type(offset) is not int or not 0 <= offset < len(block) or response_vectors[start + offset] is not None:
                         raise ValueError("Embedding service returned duplicate or invalid indices")
                     response_vectors[start + offset] = _unit(item.embedding, self.config.embed_dimensions)
+                vector_records = []
+                for item in response.data:
+                    vector = np.asarray(item.embedding, dtype=np.float32)
+                    vector_records.append({"index": item.index, "dimensions": int(vector.size),
+                                           "sha256": hashlib.sha256(vector.tobytes()).hexdigest(),
+                                           "norm": float(np.linalg.norm(vector))})
+                usage = response.usage
+                log_dataflow_event(
+                    "embedding_response", provider="openai_compatible_embeddings",
+                    model=getattr(response, "model", self.config.embed_model), dimensions=self.config.embed_dimensions,
+                    vectors=vector_records,
+                    usage=({"prompt_tokens": usage.prompt_tokens, "total_tokens": usage.total_tokens}
+                           if usage else None),
+                )
             except (ValueError, TypeError, AttributeError) as exc:
                 log_provider_failure(stage="embedding_validation", error=exc,
                                      duration_ms=(time.perf_counter() - request_started) * 1000)

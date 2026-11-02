@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from eviepoch.api import create_app
 from eviepoch.config import Settings
+from eviepoch.observability.diagnostics import log_dataflow_event
 
 
 class FakeMemory:
@@ -19,6 +20,7 @@ class FakeMemory:
         pass
 
     def add(self, request):
+        log_dataflow_event("fake_add_handler", request_id=request.request_id)
         return {"success": True, "request_id": request.request_id,
                 "user_id": request.user_id, "session_id": request.session_id}
 
@@ -57,6 +59,8 @@ class PayloadAuditTests(unittest.TestCase):
             records = [json.loads(line) for line in files[0].read_text(encoding="utf-8").splitlines()]
             self.assertEqual([record["path"] for record in records], ["/add", "/search"])
             self.assertEqual([record["status"] for record in records], [200, 200])
+            self.assertTrue(all(record.get("trace_id") for record in records))
+            self.assertEqual(len({record["trace_id"] for record in records}), 2)
             self.assertIn("My address is Kyoto", records[0]["request_body"])
             self.assertIn("Where do I live?", records[1]["request_body"])
             self.assertIn('"data":[]', records[1]["response_body"])
@@ -100,6 +104,26 @@ class PayloadAuditTests(unittest.TestCase):
             audit = root / "audit"
             self.assertTrue((audit / "AUDIT_CAP_REACHED.txt").exists())
             self.assertEqual(list(audit.glob("api-requests-*.jsonl")), [])
+
+    def test_request_and_pipeline_records_share_trace_id(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[1]) as folder:
+            root = Path(folder)
+            audit = root / "audit"
+            env = {"EPOCH_AUDIT_DIR": str(audit), "EPOCH_PIPELINE_TRACE_ENABLED": "1",
+                   "EPOCH_PIPELINE_TRACE_DIR": str(audit)}
+            with patch.dict(os.environ, env):
+                with TestClient(self._app(root)) as client:
+                    response = client.post("/add", json={"request_id": "trace-r1", "user_id": "u1",
+                                                           "session_id": "s1", "messages": [
+                                                               {"role": "user", "content": "private"}]},
+                                           headers={"Authorization": "Bearer local-test-token"})
+                    self.assertEqual(response.status_code, 200)
+            api_record = json.loads(next(audit.glob("api-requests-*.jsonl")).read_text(encoding="utf-8"))
+            pipeline_record = json.loads(next(audit.glob("pipeline-traces-*.jsonl")).read_text(encoding="utf-8"))
+            self.assertEqual(api_record["trace_id"], pipeline_record["trace_id"])
+            self.assertEqual(pipeline_record["stage"], "fake_add_handler")
+            self.assertNotIn("local-test-token", (audit / next(p.name for p in audit.iterdir()
+                                                                 if p.name.startswith("pipeline-traces-"))).read_text())
 
 
 if __name__ == "__main__":

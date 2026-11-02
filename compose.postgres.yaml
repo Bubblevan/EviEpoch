@@ -64,8 +64,6 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      reranker:
-        condition: service_started
     restart: unless-stopped
 volumes:
   eviepoch-postgres:

@@ -2,6 +2,8 @@
 
 日期：2026-11-02，Asia/Shanghai。本文描述可执行研究实现；PRD/TRD 的目标指标保持不变。
 
+Coding / Multimodal 目标设计见 [TRD §18–§23](TECHNICAL_DESIGN.md#18-三赛道共享核心与扩展边界)，依据见 [固定版本源码审阅](CODING_MULTIMODAL_SOURCE_REVIEW.md)。Coding 适配器已实现工程快照、符号、补丁/测试、观察与版本召回（schema v5）。Multimodal 适配器已实现有序 ContentPart、原图落盘、SGM/OCR 导航索引与图文 Search 响应（schema v6）。Typed proof、视觉向量 research 臂、区域裁剪和媒体删除闭包仍待完成；文本 Smoke 不能代替这两条赛道的任务评测。
+
 ## 已实现的纵向链路
 
 Add → 权威原始 Source + MemOS locator → 结构化抽取/精确 UTF-8 span 校验 → 支持/变化/纠正/冲突与反例协调 → 可回钻巩固 → 原文与导航 embedding/postings → 同事务发布 generation、幂等 ledger、治理及 Cognee 来源归属。

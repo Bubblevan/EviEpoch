@@ -1,0 +1,8 @@
+services:
+  eviepoch:
+    environment:
+      EPOCH_LLM_MODEL: gpt-6-luna
+      EPOCH_LLM_BASE_URL: http://172.19.0.1:18013/v1
+      OPENAI_API_KEY: "${CODEX_GATEWAY_TOKEN:?CODEX_GATEWAY_TOKEN is required}"
+      EPOCH_REQUEST_TIMEOUT: "300"
+      EPOCH_EXTRACTION_DEADLINE_SECONDS: "900"

@@ -1,6 +1,7 @@
 """Competition memory lifecycle, with a preserved B0 experimental baseline."""
 from __future__ import annotations
 
+import hashlib
 import threading
 import time
 from dataclasses import asdict, replace
@@ -10,6 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from .adapters import get_task_adapter
 from .config import Settings
 from .domain import (IngestBusy, InvalidExtraction, Obligation, PublishConflict, QueryPlan, Source,
                      annotate_span, chunk_source, digest, namespace, stable_id, timestamp)
@@ -18,12 +20,12 @@ from .manage import reconcile
 from .manage.temporal import verify_changes
 from .ingest.temporal import message_anchor
 from .ingest.structured import structured_nodes
-from .domain.requests import AddRequest, SearchRequest
+from .domain.requests import AddRequest, SearchRequest, add_payload_digest
 from .providers import Providers, ProviderUnavailable, StructuredOutputTruncated, StructuredOutputInvalid
 from .storage import Repository
 from .retrieval import retrieve
 from .observability.metrics import Metrics, measured
-from .observability.diagnostics import log_ingest_degraded, log_pipeline_failure
+from .observability.diagnostics import log_dataflow_event, log_ingest_degraded, log_pipeline_failure
 
 
 class SourceLocator(BaseModel):
@@ -132,6 +134,7 @@ class MemoryPipeline:
         self.metrics = Metrics()
         self.providers = providers or Providers(config)
         self.store = store or Repository(config, self.providers.embedding_identity())
+        self.adapter = get_task_adapter(config)
         self._add_slots = threading.BoundedSemaphore(config.add_concurrency)
         self._search_slots = threading.BoundedSemaphore(config.search_concurrency)
 
@@ -161,6 +164,8 @@ class MemoryPipeline:
                 ordinal=source.ordinal,
             )
             source.locator = locator.model_dump(exclude_none=True)
+            if message.envelope is not None:
+                source.locator["content_envelope"] = message.envelope.to_locator_dict(staging=True)
             if self.config.temporal_anchors_enabled:
                 source.locator["temporal_anchor"] = message_anchor(source)
         return sources
@@ -223,7 +228,6 @@ class MemoryPipeline:
         if self.config.episode_navigation_enabled:
             from .manage.episodes import episodes
             nodes.extend(episodes(sources, nodes))
-        # Overlapping windows can find the same supported assertion or governance operation twice.
         merged_policies = {}
         for policy in policies:
             key = (policy.action, policy.instruction_source_id, policy.subject, policy.predicate, policy.scope)
@@ -235,32 +239,57 @@ class MemoryPipeline:
 
     @measured("add")
     def add(self, request: AddRequest) -> dict:
+        request = self.adapter.normalize_add(request)
         if not request.request_id or not request.user_id or not request.session_id or not request.messages:
             raise ValueError("identifiers and at least one source message are required")
-        if any(not m.content or not m.content.strip() or not m.role for m in request.messages):
-            raise ValueError("source content and role must be non-empty")
+        if any(not m.role for m in request.messages):
+            raise ValueError("source role must be non-empty")
+        if any(not m.content or not str(m.content).strip() for m in request.messages):
+            raise ValueError("source content must be non-empty after normalization")
         if not self._add_slots.acquire(blocking=False):
             raise IngestBusy("Add admission limit reached")
         ns, owner = namespace(request.user_id), None
         try:
-            owner = self.store.claim(ns, request.request_id, digest(asdict(request)))
+            owner = self.store.claim(ns, request.request_id, add_payload_digest(request))
             echo = {"success": True, "request_id": request.request_id,
                     "user_id": request.user_id, "session_id": request.session_id}
             if owner is None:
+                log_dataflow_event("add_idempotent_replay", backend=("postgresql" if self.store.pg else "sqlite"),
+                                   request_id=request.request_id, response=echo)
                 return echo
             stored = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             sources = self._build_sources(request, ns, stored)
+            log_dataflow_event("add_sources_materialized", backend=("postgresql" if self.store.pg else "sqlite"),
+                               request_id=request.request_id, namespace=ns,
+                               sources=[asdict(source) for source in sources])
             with self.store.view(ns) as view:
                 known = view.context("\n".join(s.content for s in sources))
+            log_dataflow_event("add_prior_context", namespace=ns, generation=view.generation,
+                               source_count=len(known.sources), node_count=len(known.nodes),
+                               edge_count=len(known.edges))
             try:
                 spans, nodes, edges, policies = self._extract_sources(sources, known)
+                extension = self.adapter.extend_ingest(sources, known, self.providers)
+                spans.extend(extension.spans)
+                nodes.extend(extension.nodes)
+                edges.extend(extension.edges)
+                self._pending_coding_artifacts = extension.artifacts
             except (InvalidExtraction, ProviderUnavailable) as exc:
                 if not self.config.raw_ingest_fallback:
                     raise
                 # Preserve the authoritative messages but publish no unvalidated
                 # model-derived facts, spans, relations, or governance decisions.
                 spans, nodes, edges, policies = [], [], [], []
+                extension = self.adapter.extend_ingest(sources, known, self.providers)
+                spans.extend(extension.spans)
+                nodes.extend(extension.nodes)
+                edges.extend(extension.edges)
+                self._pending_coding_artifacts = extension.artifacts
                 log_ingest_degraded(error=exc, source_count=len(sources))
+            log_dataflow_event("add_extraction_and_governance", request_id=request.request_id,
+                               spans=[asdict(item) for item in spans], nodes=[asdict(item) for item in nodes],
+                               edges=[asdict(item) for item in edges],
+                               policies=[asdict(item) for item in policies])
             spans = list({span.id: span for span in
                           [annotate_span(span) for span in spans] + [span for source in sources
                            for span in chunk_source(source, self.config.source_chunk_bytes)]}.values())
@@ -268,6 +297,11 @@ class MemoryPipeline:
                 base_generation, prepared_nodes, prepared_edges, missing_node_vectors = self.store.prepare_publish(
                     ns, nodes, edges, partial(reconcile, consolidate=self.config.consolidation_enabled,
                                               reflect=self.config.reflection_enabled))
+                log_dataflow_event("add_reconciled_projection", backend=("postgresql" if self.store.pg else "sqlite"),
+                                   request_id=request.request_id, base_generation=base_generation,
+                                   prepared_nodes=[asdict(item) for item in prepared_nodes],
+                                   prepared_edges=[asdict(item) for item in prepared_edges],
+                                   missing_node_vector_ids=sorted(missing_node_vectors))
                 chunked_sources = {source.id for source in sources
                                    if len(source.content.encode("utf-8")) > self.config.source_chunk_bytes}
                 representations = {s.id: _source_representation(s) for s in sources if s.id not in chunked_sources}
@@ -275,19 +309,41 @@ class MemoryPipeline:
                                         if len(span.quote.encode("utf-8")) <= self.config.source_chunk_bytes})
                 representations.update({n.id: n.representation() for n in prepared_nodes
                                         if n.id in missing_node_vectors})
+                coding_artifacts = getattr(self, "_pending_coding_artifacts", [])
+                for artifact in coding_artifacts:
+                    if artifact.vector_text and artifact.id not in representations:
+                        representations[artifact.id] = artifact.vector_text
                 values = self.providers.embed(list(representations.values()))
                 if values.shape != (len(representations), self.config.embed_dimensions):
                     raise ValueError("embedding response shape does not match objects")
                 vectors = dict(zip(representations, values))
+                vector_metadata = []
+                for object_id, vector in vectors.items():
+                    normalized_bytes = vector.astype("float32", copy=False).tobytes()
+                    vector_metadata.append({"object_id": object_id, "dimensions": int(vector.shape[0]),
+                                            "sha256": hashlib.sha256(normalized_bytes).hexdigest()})
+                log_dataflow_event("add_embedding_vectors_ready", model=self.config.embed_model,
+                                   dimensions=self.config.embed_dimensions,
+                                   indexed_texts=[{"object_id": object_id, "text": text}
+                                                  for object_id, text in representations.items()],
+                                   vector_metadata=vector_metadata)
                 try:
-                    self.store.publish(ns, request.request_id, owner, sources, spans, prepared_nodes,
-                                       prepared_edges, policies, vectors, base_generation)
+                    generation = self.store.publish(ns, request.request_id, owner, sources, spans, prepared_nodes,
+                                                    prepared_edges, policies, vectors, base_generation,
+                                                    coding_artifacts=coding_artifacts)
+                    log_dataflow_event("add_database_commit", backend=("postgresql" if self.store.pg else "sqlite"),
+                                       request_id=request.request_id, namespace=ns, generation=generation,
+                                       policy_count=len(policies), source_count=len(sources), span_count=len(spans),
+                                       node_count=len(prepared_nodes), edge_count=len(prepared_edges),
+                                       vector_count=len(vectors), response=echo)
                     break
                 except PublishConflict:
                     if attempt == 2:
                         raise IngestBusy("namespace kept changing while preparing derived indexes; retry Add")
             return echo
-        except BaseException:
+        except BaseException as exc:
+            log_dataflow_event("add_failed", request_id=request.request_id,
+                               error_type=type(exc).__name__, failure_stage=getattr(exc, "stage", None))
             if owner is not None:
                 self.store.release(ns, request.request_id, owner)
             raise
@@ -301,33 +357,47 @@ class MemoryPipeline:
     @measured("search")
     def search_with_trace(self, request: SearchRequest):
         if request.top_k <= 0:
+            log_dataflow_event("search_response", backend=("postgresql" if self.store.pg else "sqlite"),
+                               query=request.query, response={"data": []}, reason="top_k_zero")
             return {"data": []}, {}
-        if not request.query.strip() or not request.user_id:
+        if not request.query_text.strip() or not request.user_id:
             raise ValueError("query and user_id must be non-empty")
         if not self._search_slots.acquire(blocking=False):
             raise IngestBusy("Search admission limit reached")
         try:
             ns = namespace(request.user_id)
+            log_dataflow_event("search_request", backend=("postgresql" if self.store.pg else "sqlite"),
+                               namespace=ns, query=request.query, options=request.options, top_k=request.top_k)
             for attempt in range(self.config.search_consistency_retries + 1):
                 view = self.store.read_session(ns)
                 if not view.generation:
-                    return {"data": []}, {"generation": 0, "selected_ids": []}
+                    response = {"data": []}
+                    trace = {"generation": 0, "selected_ids": []}
+                    log_dataflow_event("search_response", backend=("postgresql" if self.store.pg else "sqlite"),
+                                       generation=0, query=request.query, response=response,
+                                       retrieval_trace=trace)
+                    return response, trace
                 planning_started = time.perf_counter()
                 if self.config.profile == "full":
-                    draft = self.providers.plan(request.query, request.options)
+                    draft = self.providers.plan(request.query_text, request.options)
                     try:
-                        plan = parse_plan(draft, request.query)
+                        plan = parse_plan(draft, request.query_text)
                     except InvalidExtraction as error:
                         repair = getattr(self.providers, "repair_plan", None)
                         if repair is None:
                             raise
                         # One source-free schema repair; the query/options remain data.
-                        revised = repair(request.query, request.options, draft, str(error))
-                        plan = parse_plan(revised, request.query)
+                        revised = repair(request.query_text, request.options, draft, str(error))
+                        plan = parse_plan(revised, request.query_text)
                 else:
-                    plan = QueryPlan(["fact"], obligations=[Obligation("o1", request.query)])
+                    plan = QueryPlan(["fact"], obligations=[Obligation("o1", request.query_text)])
+                plan = self.adapter.extend_plan(plan, request.query)
+                log_dataflow_event("search_query_plan", query=request.query,
+                                   plan=asdict(plan), planning_ms=round((time.perf_counter() - planning_started) * 1000, 2))
                 planning_ms = (time.perf_counter() - planning_started) * 1000
-                chosen, trace = retrieve(view, request, plan, self.providers, self.config)
+                chosen, trace = retrieve(view, request, plan, self.providers, self.config, task_adapter=self.adapter)
+                chosen, coding_trace = self.adapter.extend_evidence(view, request, plan, chosen)
+                trace.update(coding_trace)
                 trace.setdefault("timings_ms", {})["planning"] = planning_ms
                 trace["timings_ms"].update(view.timings_ms)
                 response = {"data": [{"id": e.id, "content": e.content, "score": float(e.score),
@@ -344,6 +414,11 @@ class MemoryPipeline:
                                   (view.generation, view.policy_generation))
                     if consistent:
                         trace["consistency_retries"] = attempt
+                        log_dataflow_event(
+                            "search_response", backend=("postgresql" if self.store.pg else "sqlite"),
+                            namespace=ns, query=request.query, top_k=request.top_k,
+                            retrieval_trace=trace, evidence=[asdict(item) for item in chosen], response=response,
+                        )
                         from .observability.diagnostics import log_search_result
                         log_search_result(trace)
                         return response, trace
