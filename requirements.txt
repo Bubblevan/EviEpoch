@@ -9,3 +9,5 @@ psycopg[binary]==3.2.12
 httpx==0.28.1
 sentence-transformers==5.4.0
 transformers==4.51.3
+tree-sitter==0.25.2
+tree-sitter-python==0.25.0

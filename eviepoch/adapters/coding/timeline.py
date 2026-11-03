@@ -1,4 +1,8 @@
-"""claude-mem v15 TimelineService.filterByDepth (reference/claude_mem/TimelineService.ts)."""
+"""claude-mem v15.8.3 TimelineService.filterByDepth.
+
+Upstream depth defaults and the local 3/5 deviation are pinned in
+experiments/coding/baselines/coding_baseline_lock.json.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -240,6 +240,10 @@ class MemoryPipeline:
     @measured("add")
     def add(self, request: AddRequest) -> dict:
         request = self.adapter.normalize_add(request)
+        if self.config.task_adapter != "multimodal":
+            for message in request.messages:
+                if isinstance(message.content, list) or message.envelope is not None:
+                    raise ValueError("ordered content arrays require EPOCH_TASK_ADAPTER=multimodal")
         if not request.request_id or not request.user_id or not request.session_id or not request.messages:
             raise ValueError("identifiers and at least one source message are required")
         if any(not m.role for m in request.messages):
@@ -360,6 +364,8 @@ class MemoryPipeline:
             log_dataflow_event("search_response", backend=("postgresql" if self.store.pg else "sqlite"),
                                query=request.query, response={"data": []}, reason="top_k_zero")
             return {"data": []}, {}
+        if isinstance(request.query, list) and self.config.task_adapter != "multimodal":
+            raise ValueError("ordered query arrays require EPOCH_TASK_ADAPTER=multimodal")
         if not request.query_text.strip() or not request.user_id:
             raise ValueError("query and user_id must be non-empty")
         if not self._search_slots.acquire(blocking=False):
@@ -398,6 +404,27 @@ class MemoryPipeline:
                 chosen, trace = retrieve(view, request, plan, self.providers, self.config, task_adapter=self.adapter)
                 chosen, coding_trace = self.adapter.extend_evidence(view, request, plan, chosen)
                 trace.update(coding_trace)
+                visual = coding_trace.get("multimodal") or {}
+                visual_ids = [
+                    item["id"] for item in visual.get("obligations") or []
+                    if isinstance(item, dict) and item.get("id")
+                ]
+                if visual_ids:
+                    covered = [item for item in trace.get("covered_obligations", []) if item not in visual_ids]
+                    missing = [item for item in trace.get("missing_obligations", []) if item not in visual_ids]
+                    status = visual.get("obligation_status")
+                    if isinstance(status, dict):
+                        for item_id in visual_ids:
+                            if status.get(item_id):
+                                covered.append(item_id)
+                            else:
+                                missing.append(item_id)
+                    elif visual.get("visual_obligation_complete"):
+                        covered.extend(visual_ids)
+                    else:
+                        missing.extend(visual_ids)
+                    trace["covered_obligations"] = covered
+                    trace["missing_obligations"] = missing
                 trace.setdefault("timings_ms", {})["planning"] = planning_ms
                 trace["timings_ms"].update(view.timings_ms)
                 response = {"data": [{"id": e.id, "content": e.content, "score": float(e.score),

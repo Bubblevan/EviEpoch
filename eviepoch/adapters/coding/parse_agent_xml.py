@@ -1,4 +1,8 @@
-"""Python execution of claude-mem v15 src/sdk/parser.ts (literature/reference @ v15.8.x)."""
+"""Python execution of claude-mem v15.8.3 src/sdk/parser.ts.
+
+The vendored TypeScript and its SHA-256 are pinned in
+experiments/coding/baselines/coding_baseline_lock.json.
+"""
 from __future__ import annotations
 
 import json

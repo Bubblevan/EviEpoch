@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from ...domain import QueryPlan, Source
-from ...domain.content import SourceEnvelope, normalize_content, validate_media_limits
+from ...domain.content import SourceEnvelope, image_urls, normalize_content, precheck_data_uris, validate_media_limits
 from ...domain.requests import AddRequest, Message, SearchRequest
 from ...retrieval.evidence import Evidence
 from ...storage.view import View
@@ -18,6 +18,17 @@ class MultimodalAdapter(TaskAdapter):
         self._search_state = None
 
     def normalize_add(self, request: AddRequest) -> AddRequest:
+        urls: list[str] = []
+        for message in request.messages:
+            if message.envelope is not None:
+                urls.extend(image_urls(message.envelope.parts))
+            elif isinstance(message.content, list):
+                urls.extend(image_urls(message.content))
+        precheck_data_uris(
+            urls,
+            max_single=self.config.multimodal_max_image_bytes,
+            max_total=self.config.multimodal_max_add_bytes,
+        )
         messages: list[Message] = []
         combined = SourceEnvelope([])
         for message in request.messages:
@@ -66,5 +77,5 @@ class MultimodalAdapter(TaskAdapter):
                         evidence: list[Evidence]) -> tuple[list[Evidence], dict]:
         state = self._search_state or run_multimodal_search(view, request, self.config.candidate_limit, self.config)
         self._search_state = None
-        enriched = apply_multimodal_evidence(view, state, evidence, self.config)
+        enriched = apply_multimodal_evidence(view, state, evidence, self.config, request)
         return enriched, {"multimodal": state.trace}

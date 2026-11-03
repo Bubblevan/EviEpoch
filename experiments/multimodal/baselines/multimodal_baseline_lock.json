@@ -1,0 +1,79 @@
+{
+  "schema": "multimodal-baseline-lock-v1",
+  "locked_at": "2026-11-03",
+  "purpose": "Task 1 baseline lock for the Multimodal prototype. This file pins upstream commits and a local image fault fixture. It does not record an EviEpoch answer score.",
+  "score_policy": "Leaderboard and paper percentages are not acceptance targets and are intentionally absent from this lock.",
+  "atm_bench": {
+    "repository": "https://github.com/JingbiaoMei/ATM-Bench",
+    "commit": "ef4e5dff1a47ec71213a06e359f02753defa8fb1",
+    "commit_source": "git ls-remote HEAD on 2026-11-03 matches the source-review pin",
+    "license": "MIT",
+    "dataset_downloaded": false
+  },
+  "mem_gallery": {
+    "repository": "https://github.com/YuanchenBei/Mem-Gallery",
+    "commit": "a93959e1e978a6a7d77798ae92c2ffe41c538c62",
+    "commit_source": "git ls-remote HEAD on 2026-11-03 matches the source-review pin",
+    "license": "MIT",
+    "dataset_downloaded": false,
+    "note": "The upstream runner writes the whole dialogue before questions. That script is not a streaming Add result."
+  },
+  "memeye": {
+    "repository": "https://github.com/MinghoKwok/MemEye",
+    "commit": "0358e70d714980980dfd8c87903384db474f0b16",
+    "commit_source": "git ls-remote HEAD on 2026-11-03",
+    "license": "Apache-2.0",
+    "paper": "https://arxiv.org/abs/2605.15128",
+    "huggingface": "MemEyeBench/MemEye",
+    "huggingface_revision": "f139f89d08bf0f66986153b5ff010cac24ba383d",
+    "huggingface_note": "git ls-remote HEAD on 2026-11-03. The snapshot files were not downloaded.",
+    "readme_counts": {
+      "mirrored_questions": 371,
+      "life_scenario_tasks": 8
+    },
+    "upstream_method_configs": [
+      "full_context_text_only",
+      "full_context_multimodal",
+      "semantic_rag_text_only",
+      "semantic_rag_multimodal",
+      "simplemem",
+      "simplemem_multimodal",
+      "a_mem",
+      "reflexion",
+      "gen_agents",
+      "memoryos",
+      "m2a",
+      "mma",
+      "mirix"
+    ],
+    "dataset_downloaded": false
+  },
+  "datasets": {
+    "downloaded": false
+  },
+  "limits": {
+    "single_image_bytes": 10485760,
+    "add_total_bytes": 31457280,
+    "response_total_bytes": 31457280,
+    "mimes": ["image/jpeg", "image/png", "image/webp"]
+  },
+  "fixture": {
+    "builder": "experiments/multimodal/fixtures/fault_media.py",
+    "command": "python experiments/multimodal/fixtures/fault_media.py",
+    "cases": [
+      "ordered_text_image_text",
+      "multiple_images",
+      "image_only_query",
+      "image_without_caption",
+      "jpeg_png_webp_mime",
+      "ten_mib_boundary",
+      "thirty_mib_boundary",
+      "invalid_base64",
+      "remote_url_rejected",
+      "text_image_contradiction",
+      "caption_misses_color",
+      "same_image_multiple_sources",
+      "similar_items_not_merged"
+    ]
+  }
+}

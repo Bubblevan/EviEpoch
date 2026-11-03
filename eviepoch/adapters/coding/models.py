@@ -36,6 +36,7 @@ class RepositorySnapshot:
     dirty_overlay_hash: str | None = None
     provisional: bool = False
     source_ids: list[str] = field(default_factory=list)
+    reverts: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -66,6 +67,9 @@ class SymbolRevision:
     line_end: int | None = None
     body_hash: str | None = None
     source_ids: list[str] = field(default_factory=list)
+    precision: str = "static_approximate"
+    rename_status: str = "not_rename"
+    rename_of: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -84,6 +88,8 @@ class EngineeringEvent:
     input_span_ids: list[str] = field(default_factory=list)
     output_span_ids: list[str] = field(default_factory=list)
     source_ids: list[str] = field(default_factory=list)
+    client: str | None = None
+    tool_call_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -151,6 +157,41 @@ class DecisionOutcome:
     counterexample_ids: list[str] = field(default_factory=list)
     causal: CausalStrength = "stated"
     source_ids: list[str] = field(default_factory=list)
+    premises: list[str] = field(default_factory=list)
+    support_ids: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class ShortExperience:
+    """One attempt kept intact: problem, change, result, verification, applicability."""
+
+    experience_id: str
+    repo_id: str
+    snapshot_id: str | None
+    problem: str
+    attempted_change: str
+    observed_result: str
+    verification: str
+    polarity: OutcomePolarity
+    state: ExperienceState
+    causal: CausalStrength
+    applicability: Applicability = "unknown"
+    attempt_ids: list[str] = field(default_factory=list)
+    test_run_ids: list[str] = field(default_factory=list)
+    event_ids: list[str] = field(default_factory=list)
+    span_ids: list[str] = field(default_factory=list)
+    failure_symptoms: list[str] = field(default_factory=list)
+    counterexample_ids: list[str] = field(default_factory=list)
+    source_ids: list[str] = field(default_factory=list)
+    environment: str | None = None
+    occurrence: str = "independent"
+    reason: str = ""
+    rule: str = ""
+    reuse_condition: str = ""
+    applies_as_current_solution: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

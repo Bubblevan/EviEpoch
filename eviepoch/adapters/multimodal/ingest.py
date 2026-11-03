@@ -8,6 +8,7 @@ from ...config import Settings
 from ...domain import Source, Span, annotate_span, locate, stable_id
 from ...domain.content import SourceEnvelope, decode_data_uri
 from ..base import CodingArtifact, IngestExtension
+from .image_identity import read_image_identity
 from .media_store import write_asset
 from .models import MediaAsset, MediaOccurrence, VisualObservation
 from .vision import extract_observation, observation_index_body
@@ -33,13 +34,15 @@ def _envelope(source: Source) -> SourceEnvelope:
     return SourceEnvelope(parts)
 
 
-def _adjacent_text(parts: list, index: int) -> str:
+def _adjacent_texts(parts: list, index: int) -> list[str]:
     texts = []
     for offset in (-1, 1):
         pos = index + offset
         if 0 <= pos < len(parts) and parts[pos].get("type") == "text":
-            texts.append(parts[pos].get("text", ""))
-    return " ".join(t for t in texts if t)
+            text = parts[pos].get("text", "")
+            if isinstance(text, str) and text.strip():
+                texts.append(text)
+    return texts
 
 
 def ingest_sources(sources: list[Source], providers=None, *, config: Settings) -> IngestExtension:
@@ -76,15 +79,59 @@ def ingest_sources(sources: list[Source], providers=None, *, config: Settings) -
             content_hash = hashlib.sha256(raw).hexdigest()
             asset_id = stable_id("media-asset-v1", ns, content_hash)
             path = write_asset(root, ns, content_hash, mime, raw)
-            asset = MediaAsset(asset_id, content_hash, mime, len(raw), str(path), source_ids=[source.id])
+            identity = read_image_identity(mime, raw)
+            asset = MediaAsset(
+                asset_id,
+                content_hash,
+                mime,
+                len(raw),
+                str(path),
+                source_ids=[source.id],
+                width=identity["width"],
+                height=identity["height"],
+                namespace=ns,
+                persistence="staged",
+                depicted_date=identity["depicted_date"],
+                exif_time=identity["exif_time"],
+                captured_at=identity["captured_at"],
+            )
             occurrence_id = stable_id("media-occ-v1", source.id, index)
-            occurrence = MediaOccurrence(occurrence_id, asset_id, source.id, index, source.role)
-            fields = extract_observation(providers, url, adjacent_text=_adjacent_text(envelope.parts, index))
+            occurrence = MediaOccurrence(
+                occurrence_id,
+                asset_id,
+                source.id,
+                index,
+                source.role,
+                message_time=source.asserted_at,
+                stored_at=source.stored_at,
+                depicted_date=identity["depicted_date"],
+                exif_time=identity["exif_time"],
+                captured_at=identity["captured_at"],
+                claimed_event_time=None,
+            )
+            observed = extract_observation(
+                providers,
+                url,
+                adjacent_texts=_adjacent_texts(envelope.parts, index),
+                exif_time=identity["exif_time"],
+                width=identity["width"],
+                height=identity["height"],
+                namespace=ns,
+                caption_only=config.multimodal_caption_only,
+            )
+            fields = observed["fields"]
             observation = VisualObservation(
                 stable_id("visual-obs-v1", occurrence_id),
                 asset_id,
                 occurrence_id,
                 fields,
+                representation=observed["representation"],
+                model=observed["model"],
+                prompt_id=observed["prompt_id"],
+                confidence=observed["confidence"],
+                compared_to_original=observed["compared_to_original"],
+                experiment_arm=observed["experiment_arm"],
+                ocr_span=observed["ocr_span"],
             )
             body = observation_index_body(fields)
             artifacts.append(
@@ -94,7 +141,7 @@ def ingest_sources(sources: list[Source], providers=None, *, config: Settings) -
                     asset.to_dict(),
                     f"image {mime} {content_hash[:12]}",
                     [source.id],
-                    source.asserted_at,
+                    identity["captured_at"],
                     None,
                 )
             )

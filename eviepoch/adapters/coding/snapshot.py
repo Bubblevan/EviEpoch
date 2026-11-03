@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 
 from ...domain import digest, stable_id
 
@@ -51,9 +50,89 @@ def repo_id(namespace: str, remote: str | None, project_label: str | None, basen
     return stable_id("coding-repo-v1", namespace, "unknown")
 
 
-def ancestry_relation(parent_sha: str | None, child_sha: str | None) -> str:
-    if parent_sha and child_sha and parent_sha == child_sha:
+def graph_from_payloads(
+    payloads: list[dict],
+) -> tuple[dict[str, tuple[str, ...]], dict[str, str], dict[str, str]]:
+    """Rebuild commit parents, revert targets, and trees from stored snapshot payloads."""
+    parents: dict[str, tuple[str, ...]] = {}
+    reverts: dict[str, str] = {}
+    trees: dict[str, str] = {}
+    for payload in payloads:
+        sha = payload.get("commit_sha")
+        if not isinstance(sha, str) or not sha:
+            continue
+        recorded = tuple(item for item in (payload.get("parent_shas") or []) if isinstance(item, str) and item)
+        if sha not in parents or len(recorded) > len(parents[sha]):
+            parents[sha] = recorded
+        reverted = payload.get("reverts")
+        if isinstance(reverted, str) and reverted:
+            reverts[sha] = reverted
+        tree = payload.get("tree_sha")
+        if isinstance(tree, str) and tree:
+            trees[sha] = tree
+    return parents, reverts, trees
+
+
+def _ancestors(commit: str, parents: dict[str, tuple[str, ...]], limit: int = 256) -> set[str]:
+    seen: set[str] = set()
+    stack = list(parents.get(commit, ()))
+    while stack and len(seen) < limit:
+        item = stack.pop()
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        stack.extend(parents.get(item, ()))
+    return seen
+
+
+def _tree_rollback(
+    left: str,
+    right: str,
+    parents: dict[str, tuple[str, ...]],
+    trees: dict[str, str],
+) -> bool:
+    """True when left's tree returns to ancestor right and no immediate parent still has that tree."""
+    if not trees.get(left) or trees.get(left) != trees.get(right):
+        return False
+    if right not in _ancestors(left, parents):
+        return False
+    immediate = parents.get(left, ())
+    if not immediate or any(not trees.get(parent) for parent in immediate):
+        return False
+    return trees[left] not in {trees[parent] for parent in immediate}
+
+
+def ancestry_relation(
+    left: str | None,
+    right: str | None,
+    parents: dict[str, tuple[str, ...]] | None = None,
+    reverts: dict[str, str] | None = None,
+    trees: dict[str, str] | None = None,
+) -> str:
+    """Classify left against right from stored parents. Commit time is not a relationship.
+
+    same: identical SHA. ancestor / descendant: one stored parent chain reaches the other.
+    fork: a stored ancestor is shared and neither contains the other. merge: left has at
+    least two stored parents and right is one of them. rollback: left records a revert of
+    right, or its stored tree returns to right. Otherwise unknown — differing SHAs are
+    not an ancestor link.
+    """
+    if not left or not right:
+        return "unknown"
+    if left == right:
         return "same"
-    if parent_sha and child_sha:
-        return "unknown_dag"
+    stored = parents or {}
+    reverted = reverts or {}
+    stored_trees = trees or {}
+    if reverted.get(left) == right or _tree_rollback(left, right, stored, stored_trees):
+        return "rollback"
+    immediate = stored.get(left, ())
+    if right in immediate and len(immediate) >= 2:
+        return "merge"
+    if right in _ancestors(left, stored):
+        return "descendant"
+    if left in _ancestors(right, stored):
+        return "ancestor"
+    if _ancestors(left, stored) & _ancestors(right, stored):
+        return "fork"
     return "unknown"

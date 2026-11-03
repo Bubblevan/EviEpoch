@@ -101,6 +101,8 @@ class Settings:
     multimodal_max_image_bytes: int = 10 * 1024 * 1024
     multimodal_max_add_bytes: int = 30 * 1024 * 1024
     multimodal_max_response_bytes: int = 30 * 1024 * 1024
+    multimodal_caption_only: bool = False
+    multimodal_arm: str = "m1"
 
     @classmethod
     def from_env(cls, *, require_postgres: bool = True) -> "Settings":
@@ -188,6 +190,8 @@ class Settings:
             multimodal_max_image_bytes=_int("EPOCH_MULTIMODAL_MAX_IMAGE_BYTES", 10 * 1024 * 1024),
             multimodal_max_add_bytes=_int("EPOCH_MULTIMODAL_MAX_ADD_BYTES", 30 * 1024 * 1024),
             multimodal_max_response_bytes=_int("EPOCH_MULTIMODAL_MAX_RESPONSE_BYTES", 30 * 1024 * 1024),
+            multimodal_caption_only=_bool("EPOCH_MULTIMODAL_CAPTION_ONLY", False),
+            multimodal_arm=os.getenv("EPOCH_MULTIMODAL_ARM", "m1").strip().lower(),
         )
 
     @property
@@ -207,6 +211,8 @@ class Settings:
             raise ValueError("Unknown profile or selector")
         if self.task_adapter not in {"textual", "coding", "multimodal"}:
             raise ValueError("EPOCH_TASK_ADAPTER must be textual, coding, or multimodal")
+        if self.multimodal_arm not in {"m0", "m1"}:
+            raise ValueError("EPOCH_MULTIMODAL_ARM must be m0 or m1")
         if min(self.candidate_limit, self.graph_budget, self.beam_width, self.add_concurrency, self.search_concurrency) <= 0:
             raise ValueError("Candidate, graph, beam and concurrency budgets must be positive")
         if not 0 <= self.graph_depth <= 6 or not 0 <= self.gap_iterations <= 1 or self.extraction_chars < 256:

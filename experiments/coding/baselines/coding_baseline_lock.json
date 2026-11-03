@@ -1,0 +1,190 @@
+{
+  "schema": "coding-baseline-lock-v1",
+  "locked_at": "2026-11-03",
+  "purpose": "Task 1 baseline lock for the Coding prototype. This file pins upstream behavior and a local fault fixture. It does not record an EviEpoch solve rate.",
+  "score_policy": "First-round leaderboard percentages are not acceptance targets and are intentionally absent from this lock.",
+  "claude_mem": {
+    "repository": "https://github.com/thedotmack/claude-mem",
+    "tag": "v15.8.3",
+    "tag_object": "f264a1e0b5915bc09bbdd97d812970628e198c6e",
+    "commit": "9603d9bd7ba2bf1ed53595cf7eaa7e7b6a8013e4",
+    "package_version": "15.8.3",
+    "license": "Apache-2.0",
+    "license_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "notice": "third_party/licenses/CLAUDE-MEM-APACHE-2.0.txt",
+    "historical_note": "v12.1.1 remains the version cited by the earlier source review. This execution baseline is the newest release tag, v15.8.3.",
+    "files": {
+      "src/sdk/parser.ts": {
+        "vendored": "eviepoch/adapters/coding/reference/claude_mem/parser.ts",
+        "sha256": "3d0a86626bb3a1ed305de01781b7052f9e0f00fbdafd9107a813e9010638879a"
+      },
+      "src/services/worker/TimelineService.ts": {
+        "vendored": "eviepoch/adapters/coding/reference/claude_mem/TimelineService.ts",
+        "sha256": "062ce5d83600700afc11a6dad82aa0bde582ff7ff6e192dc7bdc743537e6da06"
+      },
+      "plugin/modes/code.json": {
+        "vendored": "eviepoch/adapters/coding/reference/claude_mem/code.json",
+        "sha256": "dd3ca1d042efba9902e6c5b607eefce6f0fe83aa7810436063d5b97a2ebf0b0d"
+      },
+      "src/sdk/prompts.ts": {
+        "vendored": "eviepoch/adapters/coding/reference/claude_mem/prompts.ts",
+        "sha256": "cf3ff4302276b59c362d3943d279ec1d25df3f233ed65b3293a84be2529edd52"
+      },
+      "src/services/worker/search/SearchOrchestrator.ts": {
+        "vendored": "eviepoch/adapters/coding/reference/claude_mem/SearchOrchestrator.ts",
+        "sha256": "b26048bd092afa308bd10c6d37b2ef079ebf84573cab9936a7c5dc6732f3536a"
+      }
+    },
+    "observation_types": [
+      "bugfix",
+      "feature",
+      "refactor",
+      "change",
+      "discovery",
+      "decision",
+      "security_alert",
+      "security_note",
+      "sensitive"
+    ],
+    "observation_concepts": [
+      "how-it-works",
+      "why-it-exists",
+      "what-changed",
+      "problem-solution",
+      "gotcha",
+      "pattern",
+      "trade-off"
+    ],
+    "observation_fields": [
+      "type",
+      "title",
+      "subtitle",
+      "narrative",
+      "facts",
+      "concepts",
+      "files_read",
+      "files_modified",
+      "attachments"
+    ],
+    "summary_fields": [
+      "request",
+      "investigated",
+      "learned",
+      "completed",
+      "next_steps",
+      "notes"
+    ],
+    "parser": {
+      "invalid_type": "preserved",
+      "missing_type": "first declared observation type",
+      "title_max_graphemes": 120,
+      "title_truncate_at": 117,
+      "max_parsed_attachments": 16,
+      "max_parsed_attachment_chars": 128,
+      "schema_tags": [
+        "type",
+        "title",
+        "subtitle",
+        "narrative",
+        "facts",
+        "fact",
+        "concepts",
+        "concept",
+        "files_read",
+        "files_modified",
+        "file",
+        "attachments",
+        "attachment"
+      ]
+    },
+    "timeline": {
+      "filter": "TimelineService.filterByDepth: numeric observation id uses index window; other anchors use epoch groups",
+      "search_manager_parse_depth_default": 10,
+      "sqlite_timeline_around_default": {"before": 3, "after": 3},
+      "postgres_depth_before_default": 3,
+      "cli_timeline_depth_before_default": 5,
+      "mcp_tool_description_default": 3,
+      "sqlite_keyword_fallback_recency": "SearchOrchestrator.supplementEmptyCategories applies no 90-day window"
+    },
+    "evi_epoch_deviations": [
+      {
+        "location": "eviepoch/adapters/coding/controller.py expand_attempt_timeline",
+        "upstream": "SearchManager.parseDepth defaults a missing depth to 10",
+        "local": "depth_before=3 and depth_after=5",
+        "status": "recorded, not changed in this lock"
+      }
+    ]
+  },
+  "causal_memory": {
+    "repository": "https://github.com/JingxuanC/causal-memory",
+    "commit": "39053ff6fd7a18771d59f0c10240b19c37f412b6",
+    "license": "Apache-2.0",
+    "types_path": "crates/causal-memory/src/store/types.rs",
+    "types_git_blob": "90ccac1e8e6c3a613789cd3fa7afe221999adae9",
+    "types_sha256": "2a645592ea971e8b41c647dd00a688bdd408fd7c27700ece048af05df9305b3e",
+    "decision_outcome_struct": "CausalEntry",
+    "fields": [
+      "edge_id",
+      "decision_id",
+      "decision_text",
+      "outcome_id",
+      "outcome_text",
+      "relation",
+      "confidence",
+      "task_tag",
+      "event_time",
+      "valid_to",
+      "access_count",
+      "last_accessed_at",
+      "discovered_by",
+      "discovered_at",
+      "outcome_polarity",
+      "superseded_by",
+      "context_fingerprint",
+      "context_text",
+      "influenced_by"
+    ]
+  },
+  "datasets": {
+    "downloaded": false,
+    "swe_context_bench": {
+      "repository": "https://github.com/jiayuanz3/SWEContextBench",
+      "commit": "12ad6ab14e18e9378e1e293c9edbc3f7ce43d27b",
+      "readme_counts": {
+        "base_tasks": 1007,
+        "related_tasks": 362,
+        "repositories": 53,
+        "languages": 9
+      },
+      "paper": "https://arxiv.org/abs/2602.08316",
+      "huggingface": "jiayuanz3/SWEContextBench",
+      "huggingface_revision": null,
+      "huggingface_note": "huggingface.co was unreachable on 2026-11-03, so the dataset snapshot revision is not pinned. Pin it before any run."
+    },
+    "memdev_bench": {
+      "paper": "https://arxiv.org/abs/2610.27524v1",
+      "published": "2026-10-20T02:39:26Z",
+      "abstract_counts": {
+        "base_tasks": 555,
+        "historical_tasks": 4869
+      },
+      "code_repository": null,
+      "note": "The arXiv entry located on 2026-11-03 has no code repository. Counts stay at the v1 abstract until a dataset snapshot is pinned."
+    }
+  },
+  "fixture": {
+    "builder": "experiments/coding/fixtures/fault_repo.py",
+    "command": "python experiments/coding/fixtures/fault_repo.py",
+    "cases": [
+      "same_path_different_repo",
+      "fork_merge_rollback",
+      "dirty_overlay",
+      "symbol_rename",
+      "removed_api",
+      "fail_then_success",
+      "test_passed_on_wrong_tree",
+      "missing_verification",
+      "diff_source_round_trip"
+    ]
+  }
+}

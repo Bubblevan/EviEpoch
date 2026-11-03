@@ -33,6 +33,8 @@ def normalize_native_source(source: Source) -> NativeEngineeringEvent:
         ("cwd", "cwd"),
         ("repository", "repository"),
         ("commit", "commit_sha"),
+        ("client", "client"),
+        ("tool_call_id", "tool_call_id"),
     ):
         value = locator.get(key)
         if isinstance(value, str) and value.strip():
@@ -52,6 +54,10 @@ def normalize_native_source(source: Source) -> NativeEngineeringEvent:
     event.repository = event.repository or (data.get("repository") if isinstance(data.get("repository"), str) else None)
     if isinstance(data.get("commit"), str):
         event.commit_sha = data["commit"].lower()
+    if isinstance(data.get("client"), str):
+        event.client = data["client"]
+    if isinstance(data.get("tool_call_id"), str):
+        event.tool_call_id = data["tool_call_id"]
     parents = data.get("parents")
     if isinstance(parents, list):
         event.parent_shas = [str(item).lower() for item in parents if isinstance(item, str)]

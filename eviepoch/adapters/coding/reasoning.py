@@ -64,6 +64,7 @@ def extract_reasoning_decisions(source: Source, providers) -> list[CodingArtifac
             [],
             "hypothesized",
             [source.id],
+            premises=[reasoning.strip()] if isinstance(reasoning, str) and reasoning.strip() else [],
         )
         artifacts.append(
             CodingArtifact(

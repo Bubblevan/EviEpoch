@@ -11,12 +11,26 @@ def asset_path(root: Path, ns: str, content_hash: str, mime: str) -> Path:
 
 
 def write_asset(root: Path, ns: str, content_hash: str, mime: str, raw: bytes) -> Path:
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != content_hash or not raw:
+        raise ValueError("media hash or length does not match decoded bytes")
     path = asset_path(root, ns, content_hash, mime)
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        path.write_bytes(raw)
-    elif hashlib.sha256(path.read_bytes()).hexdigest() != content_hash:
-        raise ValueError("media hash collision at storage path")
+    if path.exists():
+        existing = path.read_bytes()
+        if len(existing) != len(raw) or hashlib.sha256(existing).hexdigest() != content_hash:
+            raise ValueError("media hash collision at storage path")
+        return path
+    temporary = path.with_name(path.name + ".staging")
+    temporary.write_bytes(raw)
+    stored = temporary.read_bytes()
+    try:
+        if len(stored) != len(raw) or hashlib.sha256(stored).hexdigest() != content_hash:
+            raise ValueError("stored media failed hash or length check")
+        temporary.replace(path)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
     return path
 
 

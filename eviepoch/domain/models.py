@@ -310,6 +310,11 @@ class QueryPlan:
     required_relations: list[str] = field(default_factory=list)
     actions: list[str] = field(default_factory=list)
     order_by: str = "event"
+    task_kind: str = "unknown"
+    target_repository: str | None = None
+    target_snapshot: str | None = None
+    affected_symbols: list[str] = field(default_factory=list)
+    acceptance: list[str] = field(default_factory=list)
 
 
 @dataclass

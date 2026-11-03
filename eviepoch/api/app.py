@@ -13,7 +13,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..config import Settings
-from ..domain.content import normalize_content, validate_media_limits
+from ..domain.content import image_urls, normalize_content, precheck_data_uris, validate_media_limits
 from .audit import PayloadAuditMiddleware
 from ..observability.diagnostics import log_api_failure, request_context
 from ..domain import IdempotencyConflict, IngestBusy, InvalidExtraction
@@ -92,11 +92,18 @@ def create_app(config: Settings | None = None, memory=None) -> FastAPI:
     )
     app.state.pipeline = memory
 
+    def _reject_array(reason: str) -> None:
+        raise HTTPException(status_code=422, detail={"reason": reason})
+
     def _coerce_message(message: MessageBody) -> Message:
         if isinstance(message.content, list):
             if config.task_adapter != "multimodal":
-                raise ValueError("ordered content arrays require EPOCH_TASK_ADAPTER=multimodal")
-            envelope = normalize_content(message.content)
+                _reject_array("ordered content arrays require EPOCH_TASK_ADAPTER=multimodal")
+            envelope = normalize_content(
+                message.content,
+                max_single=config.multimodal_max_image_bytes,
+                max_total=config.multimodal_max_add_bytes,
+            )
             validate_media_limits(
                 envelope,
                 max_single=config.multimodal_max_image_bytes,
@@ -116,8 +123,12 @@ def create_app(config: Settings | None = None, memory=None) -> FastAPI:
     def _coerce_query(value: str | list[dict[str, Any]]):
         if isinstance(value, list):
             if config.task_adapter != "multimodal":
-                raise ValueError("ordered query arrays require EPOCH_TASK_ADAPTER=multimodal")
-            envelope = normalize_content(value)
+                _reject_array("ordered query arrays require EPOCH_TASK_ADAPTER=multimodal")
+            envelope = normalize_content(
+                value,
+                max_single=config.multimodal_max_image_bytes,
+                max_total=config.multimodal_max_add_bytes,
+            )
             validate_media_limits(
                 envelope,
                 max_single=config.multimodal_max_image_bytes,
@@ -192,6 +203,16 @@ def create_app(config: Settings | None = None, memory=None) -> FastAPI:
                              fingerprint_key=config.auth_token, message_count=len(body.messages),
                              input_chars=input_chars):
             try:
+                if config.task_adapter == "multimodal":
+                    urls = []
+                    for message in body.messages:
+                        if isinstance(message.content, list):
+                            urls.extend(image_urls(message.content))
+                    precheck_data_uris(
+                        urls,
+                        max_single=config.multimodal_max_image_bytes,
+                        max_total=config.multimodal_max_add_bytes,
+                    )
                 return memory.add(
                     AddRequest(
                         body.request_id,
@@ -212,13 +233,24 @@ def create_app(config: Settings | None = None, memory=None) -> FastAPI:
                     input_chars=input_chars,
                 )
                 raise
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail={"reason": str(exc)}) from exc
 
     @app.post("/search")
     def search(body: SearchBody, authorization: str | None = Header(default=None),
                x_api_key: str | None = Header(default=None)):
         authorize(authorization, x_api_key)
         started = time.perf_counter()
-        query = _coerce_query(body.query)
+        try:
+            if isinstance(body.query, list) and config.task_adapter == "multimodal":
+                precheck_data_uris(
+                    image_urls(body.query),
+                    max_single=config.multimodal_max_image_bytes,
+                    max_total=config.multimodal_max_add_bytes,
+                )
+            query = _coerce_query(body.query)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail={"reason": str(exc)}) from exc
         query_chars = len(query) if isinstance(query, str) else len(str(query))
         with request_context(operation="search", query_chars=query_chars, top_k=body.top_k,
                              options_count=len(body.options or [])):

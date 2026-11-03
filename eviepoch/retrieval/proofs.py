@@ -66,6 +66,8 @@ def _closure(node_id: str, plan: QueryPlan, snap: Snapshot, depth: int) -> set[s
 def proofs(plan: QueryPlan, snap: Snapshot, scores: dict[str, float], config,
            candidate_sources: set[str] | None = None) -> QueryPlan:
     for obligation in plan.obligations:
+        if obligation.id.startswith("coding-applicability-") or obligation.id.startswith("mm-visual-"):
+            continue
         ranked = []
         for node in snap.nodes.values():
             if node.kind in {"summary", "episode"}:

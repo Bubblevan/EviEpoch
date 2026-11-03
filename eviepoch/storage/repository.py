@@ -285,9 +285,6 @@ class Repository:
                     c.execute("INSERT INTO ee_dependencies(ns,object_id,source_id) VALUES(?,?,?) "
                               "ON CONFLICT DO NOTHING", (ns, edge.id, sid))
                 attach(c, ns, edge.id, edge.source_ids, generation)
-            for policy in policies:
-                policy.through_generation = generation
-                apply_policy(c, ns, policy, generation)
             if coding_artifacts:
                 coding_only = [a for a in coding_artifacts if a.kind.startswith("coding_")]
                 mm_only = [a for a in coding_artifacts if a.kind.startswith("multimodal_")]
@@ -299,6 +296,9 @@ class Repository:
                     from ..adapters.multimodal.storage import put_multimodal_artifacts
                     put_multimodal_artifacts(c, ns, generation, mm_only, vectors,
                                              self.config.embed_dimensions, pg=self.pg)
+            for policy in policies:
+                policy.through_generation = generation
+                apply_policy(c, ns, policy, generation)
             if policies:
                 policy_generation += 1
             c.execute("UPDATE ee_namespaces SET generation=?,policy_generation=? WHERE ns=?",

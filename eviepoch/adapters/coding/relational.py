@@ -23,7 +23,18 @@ def persist_coding_edges(connection, ns: str, generation: int, edges) -> None:
         connection.execute(
             "INSERT INTO ee_coding_edges(ns,id,origin,target,kind,evidence,generation) VALUES(?,?,?,?,?,?,?) "
             "ON CONFLICT(ns,id) DO UPDATE SET evidence=excluded.evidence,generation=excluded.generation",
-            (ns, edge.id, edge.origin, edge.target, edge.kind, json.dumps(edge.source_ids), generation),
+            (
+                ns,
+                edge.id,
+                edge.origin,
+                edge.target,
+                edge.kind,
+                json.dumps(
+                    {"source_ids": list(edge.source_ids), "derivation": edge.derivation},
+                    ensure_ascii=False,
+                ),
+                generation,
+            ),
         )
 
 
@@ -50,6 +61,23 @@ def persist_coding_rows(connection, ns: str, generation: int, artifacts: list[Co
             )
         elif kind == "snapshot":
             data = artifact.payload
+            previous_row = connection.execute(
+                "SELECT payload FROM ee_code_snapshots WHERE ns=? AND snapshot_id=?",
+                (ns, artifact.id),
+            ).fetchone()
+            if previous_row:
+                try:
+                    previous = json.loads(previous_row[0])
+                except (ValueError, TypeError):
+                    previous = {}
+                if isinstance(previous, dict):
+                    if not data.get("parent_shas") and previous.get("parent_shas"):
+                        data["parent_shas"] = list(previous["parent_shas"])
+                    if not data.get("reverts") and previous.get("reverts"):
+                        data["reverts"] = previous["reverts"]
+                    if not data.get("tree_sha") and previous.get("tree_sha"):
+                        data["tree_sha"] = previous["tree_sha"]
+            payload = json.dumps(data, ensure_ascii=False)
             _upsert(
                 connection,
                 "INSERT INTO ee_code_snapshots(ns,snapshot_id,repo_id,commit_sha,tree_sha,dirty_overlay_hash,"
@@ -135,15 +163,20 @@ def persist_coding_rows(connection, ns: str, generation: int, artifacts: list[Co
                 "payload=excluded.payload",
                 (ns, artifact.id, data.get("snapshot_id"), data.get("exit_code"), data.get("outcome"), generation, payload),
             )
-        elif kind in {"observation", "decision_outcome"}:
+        elif kind in {"observation", "decision_outcome", "experience"}:
             data = artifact.payload
-            experience_kind = "decision_outcome" if kind == "decision_outcome" else data.get("kind", "observation")
+            if kind == "decision_outcome":
+                experience_kind = "decision_outcome"
+            elif kind == "experience":
+                experience_kind = "experience"
+            else:
+                experience_kind = data.get("kind", "observation")
             state = data.get("state", "proposed")
             polarity = data.get("polarity")
             _upsert(
                 connection,
                 "INSERT INTO ee_experiences(ns,experience_id,kind,state,polarity,generation,payload) "
                 "VALUES(?,?,?,?,?,?,?) ON CONFLICT(ns,experience_id) DO UPDATE SET generation=excluded.generation,"
-                "state=excluded.state,payload=excluded.payload",
+                "state=excluded.state,polarity=excluded.polarity,payload=excluded.payload",
                 (ns, artifact.id, experience_kind, state, polarity, generation, payload),
             )
